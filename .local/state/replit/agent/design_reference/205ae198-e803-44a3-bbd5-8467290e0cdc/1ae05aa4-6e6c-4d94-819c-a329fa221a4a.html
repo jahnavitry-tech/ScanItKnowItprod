@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scan It Know It - Smart Product Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        darkMode: 'class',
+        theme: {
+            extend: {
+                borderRadius: {
+                    lg: "var(--radius)",
+                    md: "calc(var(--radius) - 2px)",
+                    sm: "calc(var(--radius) - 4px)",
+                },
+                colors: {
+                    background: "var(--background)",
+                    foreground: "var(--foreground)",
+                    card: {
+                        DEFAULT: "var(--card)",
+                        foreground: "var(--card-foreground)",
+                    },
+                    popover: {
+                        DEFAULT: "var(--popover)",
+                        foreground: "var(--popover-foreground)",
+                    },
+                    primary: {
+                        DEFAULT: "var(--primary)",
+                        foreground: "var(--primary-foreground)",
+                    },
+                    secondary: {
+                        DEFAULT: "var(--secondary)",
+                        foreground: "var(--secondary-foreground)",
+                    },
+                    muted: {
+                        DEFAULT: "var(--muted)",
+                        foreground: "var(--muted-foreground)",
+                    },
+                    accent: {
+                        DEFAULT: "var(--accent)",
+                        foreground: "var(--accent-foreground)",
+                    },
+                    destructive: {
+                        DEFAULT: "var(--destructive)",
+                        foreground: "var(--destructive-foreground)",
+                    },
+                    border: "var(--border)",
+                    input: "var(--input)",
+                    ring: "var(--ring)",
+                },
+                fontFamily: {
+                    sans: ["Inter", "system-ui", "sans-serif"],
+                },
+                animation: {
+                    'fade-in': 'fadeIn 0.3s ease-in-out',
+                    'slide-up': 'slideUp 0.3s ease-out',
+                    'pulse-slow': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                }
+            },
+        }
+    };
+    </script>
+    <style>
+        :root {
+            --background: hsl(0 0% 100%);
+            --foreground: hsl(222.2 84% 4.9%);
+            --card: hsl(0 0% 100%);
+            --card-foreground: hsl(222.2 84% 4.9%);
+            --popover: hsl(0 0% 100%);
+            --popover-foreground: hsl(222.2 84% 4.9%);
+            --primary: hsl(221.2 83.2% 53.3%);
+            --primary-foreground: hsl(210 40% 98%);
+            --secondary: hsl(210 40% 96%);
+            --secondary-foreground: hsl(222.2 84% 4.9%);
+            --muted: hsl(210 40% 96%);
+            --muted-foreground: hsl(215.4 16.3% 46.9%);
+            --accent: hsl(210 40% 96%);
+            --accent-foreground: hsl(222.2 84% 4.9%);
+            --destructive: hsl(0 84.2% 60.2%);
+            --destructive-foreground: hsl(210 40% 98%);
+            --border: hsl(214.3 31.8% 91.4%);
+            --input: hsl(214.3 31.8% 91.4%);
+            --ring: hsl(221.2 83.2% 53.3%);
+            --radius: 0.75rem;
+        }
+
+        .dark {
+            --background: hsl(222.2 84% 4.9%);
+            --foreground: hsl(210 40% 98%);
+            --card: hsl(222.2 84% 4.9%);
+            --card-foreground: hsl(210 40% 98%);
+            --popover: hsl(222.2 84% 4.9%);
+            --popover-foreground: hsl(210 40% 98%);
+            --primary: hsl(217.2 91.2% 59.8%);
+            --primary-foreground: hsl(222.2 84% 4.9%);
+            --secondary: hsl(217.2 32.6% 17.5%);
+            --secondary-foreground: hsl(210 40% 98%);
+            --muted: hsl(217.2 32.6% 17.5%);
+            --muted-foreground: hsl(215 20.2% 65.1%);
+            --accent: hsl(217.2 32.6% 17.5%);
+            --accent-foreground: hsl(210 40% 98%);
+            --destructive: hsl(0 62.8% 30.6%);
+            --destructive-foreground: hsl(210 40% 98%);
+            --border: hsl(217.2 32.6% 17.5%);
+            --input: hsl(217.2 32.6% 17.5%);
+            --ring: hsl(224.3 76.3% 94.1%);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .camera-viewfinder {
+            background: linear-gradient(135deg, hsl(var(--muted)) 0%, hsl(var(--secondary)) 100%);
+        }
+
+        .analysis-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .analysis-card.expanded {
+            transform: scale(1.02);
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-background text-foreground min-h-screen font-sans antialiased">
+    <!-- @COMPONENT: App [main application container] -->
+    <div id="app" class="relative">
+        
+        <!-- Header with Dark Mode Toggle -->
+        <!-- @COMPONENT: Header [navigation and theme toggle] -->
+        <header class="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div class="container mx-auto px-4 h-16 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-camera text-primary text-xl"></i>
+                    <h1 class="text-xl font-bold">Scan It Know It</h1>
+                </div>
+                
+                <!-- Theme Toggle -->
+                <button 
+                    id="theme-toggle"
+                    class="relative inline-flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-background hover:bg-accent hover:text-accent-foreground transition-colors"
+                    data-event="click:toggleTheme"
+                    data-implementation="Toggle between light and dark themes"
+                >
+                    <i class="fas fa-sun dark:hidden text-lg"></i>
+                    <i class="fas fa-moon hidden dark:block text-lg"></i>
+                </button>
+            </div>
+        </header>
+        <!-- @END_COMPONENT: Header -->
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-4 py-6 max-w-md">
+            
+            <!-- @COMPONENT: CameraScreen [camera interface and controls] -->
+            <div id="camera-screen" class="space-y-6">
+                
+                <!-- Camera Viewfinder -->
+                <div class="relative aspect-[3/4] rounded-2xl overflow-hidden bg-card border border-border camera-viewfinder">
+                    <!-- @FUNCTIONALITY: This should implement device camera feed using getUserMedia API -->
+                    <!-- Simulated camera feed -->
+                    <!-- A close-up view of a nutrition label on a cereal box showing ingredients and nutritional facts -->
+                    <div 
+                        class="absolute inset-0 bg-cover bg-center"
+                        style="background-image: url('https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=1067')"
+                    ></div>
+                    
+                    <!-- Camera Overlay -->
+                    <div class="absolute inset-0 bg-black/20">
+                        <!-- Focus Frame -->
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <div class="w-64 h-64 border-2 border-white/50 rounded-lg relative">
+                                <!-- Corner brackets -->
+                                <div class="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl"></div>
+                                <div class="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr"></div>
+                                <div class="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-white rounded-bl"></div>
+                                <div class="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-white rounded-br"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Top Controls -->
+                        <div class="absolute top-4 left-4 right-4 flex justify-between items-center">
+                            <button class="bg-black/40 backdrop-blur-sm rounded-full p-2 text-white">
+                                <i class="fas fa-flash text-lg"></i>
+                            </button>
+                            <button 
+                                class="bg-black/40 backdrop-blur-sm rounded-full p-2 text-white"
+                                data-event="click:switchCamera"
+                                data-implementation="Switch between front and back camera"
+                            >
+                                <i class="fas fa-sync-alt text-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Camera Controls -->
+                <div class="flex items-center justify-center space-x-8">
+                    <!-- Gallery Button -->
+                    <button 
+                        class="w-14 h-14 rounded-xl border-2 border-border bg-card hover:bg-accent transition-colors overflow-hidden"
+                        data-event="click:openGallery"
+                        data-implementation="Open device photo gallery for multiple selection"
+                    >
+                        <!-- A grid of colorful food product images showing various packaged items -->
+                        <img 
+                            src="https://images.unsplash.com/photo-1534723452862-4c874018d66d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=100&h=100" 
+                            alt="Gallery preview"
+                            class="w-full h-full object-cover"
+                        />
+                    </button>
+
+                    <!-- Capture Button -->
+                    <button 
+                        id="capture-btn"
+                        class="w-20 h-20 bg-white rounded-full border-4 border-primary shadow-lg hover:scale-105 transition-transform relative overflow-hidden"
+                        data-event="click:capturePhoto"
+                        data-implementation="Capture photo and process with AI"
+                    >
+                        <div class="absolute inset-2 bg-primary rounded-full"></div>
+                    </button>
+
+                    <!-- AI Scan Mode -->
+                    <button class="w-14 h-14 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center">
+                        <i class="fas fa-magic text-lg"></i>
+                    </button>
+                </div>
+
+                <!-- Status Indicator -->
+                <div class="text-center">
+                    <p class="text-muted-foreground text-sm">Point camera at product label</p>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: CameraScreen -->
+
+            <!-- @COMPONENT: ProcessingScreen [AI processing state] -->
+            <div id="processing-screen" class="hidden space-y-8 text-center">
+                <div class="space-y-4">
+                    <div class="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center animate-pulse-slow">
+                        <i class="fas fa-brain text-primary-foreground text-2xl"></i>
+                    </div>
+                    <div class="space-y-2">
+                        <h2 class="text-2xl font-semibold">Analyzing Product</h2>
+                        <p class="text-muted-foreground">AI is identifying the product and extracting text...</p>
+                    </div>
+                </div>
+                
+                <!-- Progress Steps -->
+                <div class="space-y-3">
+                    <div class="flex items-center space-x-3 p-3 bg-card rounded-lg border border-border">
+                        <div class="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
+                            <i class="fas fa-check text-primary-foreground text-xs"></i>
+                        </div>
+                        <span class="text-sm">Product identified</span>
+                    </div>
+                    <div class="flex items-center space-x-3 p-3 bg-card rounded-lg border border-border">
+                        <div class="w-6 h-6 bg-primary rounded-full animate-pulse"></div>
+                        <span class="text-sm">Extracting text information</span>
+                    </div>
+                    <div class="flex items-center space-x-3 p-3 bg-muted rounded-lg">
+                        <div class="w-6 h-6 border-2 border-muted-foreground/30 rounded-full"></div>
+                        <span class="text-sm text-muted-foreground">Preparing analysis</span>
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: ProcessingScreen -->
+
+            <!-- @COMPONENT: ProductAnalysisScreen [main analysis interface] -->
+            <div id="analysis-screen" class="hidden space-y-6 animate-fade-in">
+                
+                <!-- Product Header -->
+                <div class="bg-card rounded-2xl p-6 border border-border shadow-sm">
+                    <div class="flex items-center space-x-4 mb-4">
+                        <!-- A close-up of a colorful breakfast cereal box showing the brand logo and product name -->
+                        <img 
+                            src="https://images.unsplash.com/photo-1621939514649-280e2ee25f60?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=100&h=100" 
+                            alt="Product image"
+                            class="w-16 h-16 rounded-xl object-cover border border-border"
+                            data-mock-image="true"
+                            data-implementation="Display captured product image"
+                        />
+                        <div class="flex-1">
+                            <h1 class="text-2xl font-bold" data-bind="product.name" data-mock="true">Honey Nut Cheerios</h1>
+                            <p class="text-muted-foreground text-sm">Breakfast Cereal</p>
+                        </div>
+                        <button class="text-muted-foreground hover:text-foreground transition-colors">
+                            <i class="fas fa-share-alt text-lg"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- AI Summary -->
+                    <div class="space-y-3">
+                        <h3 class="font-semibold text-primary">Product Summary</h3>
+                        <div class="text-sm text-muted-foreground leading-relaxed space-y-1" data-bind="product.summary" data-mock="true">
+                            <p>• Whole grain oat cereal with real honey and natural almond flavor</p>
+                            <p>• Provides heart-healthy benefits from whole grain oats</p>
+                            <p>• Contains essential vitamins and minerals including iron and B vitamins</p>
+                            <p>• Best served with milk for a complete breakfast experience</p>
+                            <p>• Suitable for ages 3+ as part of a balanced diet</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analysis Cards -->
+                <div class="space-y-4">
+                    
+                    <!-- @COMPONENT: AnalysisCard [expandable information card] -->
+                    <!-- Ingredients Card -->
+                    <div class="analysis-card bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+                        <button 
+                            class="w-full p-6 text-left hover:bg-accent/50 transition-colors card-trigger"
+                            data-card="ingredients"
+                            data-event="click:toggleCard"
+                            data-implementation="Fetch ingredients data on first click, toggle afterwards"
+                        >
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
+                                        <i class="fas fa-leaf text-green-600 dark:text-green-400"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-semibold">What are the Ingredients?</h3>
+                                        <p class="text-sm text-muted-foreground">Analyze ingredient safety</p>
+                                    </div>
+                                </div>
+                                <i class="fas fa-chevron-down transition-transform card-chevron"></i>
+                            </div>
+                        </button>
+                        
+                        <!-- Card Content -->
+                        <div class="card-content hidden">
+                            <div class="px-6 pb-6 space-y-4">
+                                <!-- Loading State -->
+                                <div class="loading-state hidden flex items-center justify-center py-8">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                                        <span class="text-sm text-muted-foreground">Analyzing ingredients...</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Ingredients List -->
+                                <div class="ingredients-data hidden space-y-3" data-mock="true">
+                                    <!-- @MAP: ingredients.map(ingredient => ( -->
+                                    <div class="flex items-center justify-between p-3 bg-secondary rounded-xl">
+                                        <div class="flex-1">
+                                            <p class="font-medium text-sm">Whole Grain Oats</p>
+                                            <p class="text-xs text-green-600 dark:text-green-400">Safe</p>
+                                        </div>
+                                        <div class="w-6 h-6 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                                            <i class="fas fa-check text-green-600 dark:text-green-400 text-xs"></i>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="flex items-center justify-between p-3 bg-secondary rounded-xl">
+                                        <div class="flex-1">
+                                            <p class="font-medium text-sm">Sugar</p>
+                                            <p class="text-xs text-yellow-600 dark:text-yellow-400">High glycemic index</p>
+                                        </div>
+                                        <div class="w-6 h-6 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center">
+                                            <i class="fas fa-exclamation text-yellow-600 dark:text-yellow-400 text-xs"></i>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="flex items-center justify-between p-3 bg-secondary rounded-xl">
+                                        <div class="flex-1">
+                                            <p class="font-medium text-sm">Natural Almond Flavor</p>
+                                            <p class="text-xs text-green-600 dark:text-green-400">Safe</p>
+                                        </div>
+                                        <div class="w-6 h-6 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                                            <i class="fas fa-check text-green-600 dark:text-green-400 text-xs"></i>
+                                        </div>
+                                    </div>
+                                    <!-- @END_MAP )) -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Calories Card -->
+                    <div class="analysis-card bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+                        <button 
+                            class="w-full p-6 text-left hover:bg-accent/50 transition-colors card-trigger"
+                            data-card="calories"
+                            data-event="click:toggleCard"
+                            data-implementation="Fetch nutritional data on first click, toggle afterwards"
+                        >
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-xl flex items-center justify-center">
+                                        <i class="fas fa-fire text-orange-600 dark:text-orange-400"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-semibold">How about calories?</h3>
+                                        <p class="text-sm text-muted-foreground">Nutritional breakdown</p>
+                                    </div>
+                                </div>
+                                <i class="fas fa-chevron-down transition-transform card-chevron"></i>
+                            </div>
+                        </button>
+                        
+                        <div class="card-content hidden">
+                            <div class="px-6 pb-6 space-y-4">
+                                <div class="loading-state hidden flex items-center justify-center py-8">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                                        <span class="text-sm text-muted-foreground">Analyzing nutrition...</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="calories-data hidden space-y-4" data-mock="true">
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div class="bg-secondary p-4 rounded-xl text-center">
+                                            <div class="text-2xl font-bold text-primary">110</div>
+                                            <div class="text-xs text-muted-foreground">Calories per serving</div>
+                                        </div>
+                                        <div class="bg-secondary p-4 rounded-xl text-center">
+                                            <div class="text-2xl font-bold text-orange-600">9g</div>
+                                            <div class="text-xs text-muted-foreground">Total sugars</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="space-y-2">
+                                        <h4 class="font-medium text-sm">Sugar Types</h4>
+                                        <div class="space-y-2">
+                                            <div class="flex justify-between text-sm">
+                                                <span>Added sugars</span>
+                                                <span class="font-medium">2g</span>
+                                            </div>
+                                            <div class="flex justify-between text-sm">
+                                                <span>Natural sugars</span>
+                                                <span class="font-medium">7g</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Reddit Reviews Card -->
+                    <div class="analysis-card bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+                        <button 
+                            class="w-full p-6 text-left hover:bg-accent/50 transition-colors card-trigger"
+                            data-card="reddit"
+                            data-event="click:toggleCard"
+                            data-implementation="Fetch Reddit reviews on first click, toggle afterwards"
+                        >
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center">
+                                        <i class="fab fa-reddit text-red-600 dark:text-red-400"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-semibold">Reddit reviews</h3>
+                                        <p class="text-sm text-muted-foreground">Community opinions</p>
+                                    </div>
+                                </div>
+                                <i class="fas fa-chevron-down transition-transform card-chevron"></i>
+                            </div>
+                        </button>
+                        
+                        <div class="card-content hidden">
+                            <div class="px-6 pb-6 space-y-4">
+                                <div class="loading-state hidden flex items-center justify-center py-8">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                                        <span class="text-sm text-muted-foreground">Searching Reddit...</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="reddit-data hidden space-y-4" data-mock="true">
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div class="bg-green-50 dark:bg-green-900/20 p-3 rounded-xl">
+                                            <h4 class="font-semibold text-green-700 dark:text-green-400 text-sm mb-2">Pros</h4>
+                                            <ul class="text-xs text-green-600 dark:text-green-300 space-y-1">
+                                                <li>• Great taste</li>
+                                                <li>• Heart healthy</li>
+                                                <li>• Good value</li>
+                                                <li>• Kids love it</li>
+                                            </ul>
+                                        </div>
+                                        <div class="bg-red-50 dark:bg-red-900/20 p-3 rounded-xl">
+                                            <h4 class="font-semibold text-red-700 dark:text-red-400 text-sm mb-2">Cons</h4>
+                                            <ul class="text-xs text-red-600 dark:text-red-300 space-y-1">
+                                                <li>• High in sugar</li>
+                                                <li>• Gets soggy fast</li>
+                                                <li>• Artificial taste</li>
+                                                <li>• Pricey</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="bg-secondary p-3 rounded-xl">
+                                        <div class="flex items-center space-x-2 mb-2">
+                                            <div class="flex space-x-1">
+                                                <i class="fas fa-star text-yellow-400 text-xs"></i>
+                                                <i class="fas fa-star text-yellow-400 text-xs"></i>
+                                                <i class="fas fa-star text-yellow-400 text-xs"></i>
+                                                <i class="fas fa-star-half-alt text-yellow-400 text-xs"></i>
+                                                <i class="far fa-star text-gray-300 text-xs"></i>
+                                            </div>
+                                            <span class="text-xs font-medium">3.4/5 overall</span>
+                                        </div>
+                                        <p class="text-xs text-muted-foreground">Based on 127 Reddit mentions</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Q&A Chat Card -->
+                    <div class="analysis-card bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+                        <button 
+                            class="w-full p-6 text-left hover:bg-accent/50 transition-colors card-trigger"
+                            data-card="qa"
+                            data-event="click:toggleCard"
+                            data-implementation="Initialize chat interface on first click, toggle afterwards"
+                        >
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
+                                        <i class="fas fa-comments text-blue-600 dark:text-blue-400"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-semibold">Q&A</h3>
+                                        <p class="text-sm text-muted-foreground">Ask anything about this product</p>
+                                    </div>
+                                </div>
+                                <i class="fas fa-chevron-down transition-transform card-chevron"></i>
+                            </div>
+                        </button>
+                        
+                        <div class="card-content hidden">
+                            <div class="px-6 pb-6">
+                                <!-- @COMPONENT: ChatInterface [live Q&A chat] -->
+                                <!-- @STATE: messages:array = [], inputValue:string = '' -->
+                                <div class="chat-interface space-y-4">
+                                    <!-- Chat Messages -->
+                                    <div class="chat-messages space-y-3 max-h-64 overflow-y-auto" data-mock="true">
+                                        <div class="bg-secondary p-3 rounded-xl">
+                                            <div class="flex items-start space-x-2">
+                                                <div class="w-6 h-6 bg-primary rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                    <i class="fas fa-robot text-primary-foreground text-xs"></i>
+                                                </div>
+                                                <div class="flex-1">
+                                                    <p class="text-sm">Hi! I'm here to answer any questions about this product. What would you like to know?</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Chat Input -->
+                                    <div class="flex space-x-2">
+                                        <input 
+                                            type="text" 
+                                            placeholder="Ask about ingredients, nutrition, etc..."
+                                            class="flex-1 px-3 py-2 bg-input border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                                            data-bind="chatInput"
+                                            data-event="keypress:handleChatInput"
+                                            data-implementation="Send message on Enter key"
+                                        />
+                                        <button 
+                                            class="px-4 py-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors"
+                                            data-event="click:sendMessage"
+                                            data-implementation="Process chat message with AI"
+                                        >
+                                            <i class="fas fa-paper-plane text-sm"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <!-- @END_COMPONENT: ChatInterface -->
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: AnalysisCard -->
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex space-x-3">
+                    <button 
+                        class="flex-1 bg-primary text-primary-foreground py-3 rounded-xl font-medium hover:bg-primary/90 transition-colors"
+                        data-event="click:scanAnother"
+                        data-implementation="Reset to camera screen for new scan"
+                    >
+                        <i class="fas fa-camera mr-2"></i>
+                        Scan Another
+                    </button>
+                    <button class="px-6 py-3 border border-border rounded-xl hover:bg-accent transition-colors">
+                        <i class="fas fa-save text-lg"></i>
+                    </button>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: ProductAnalysisScreen -->
+
+        </main>
+
+        <!-- Toast Notifications -->
+        <!-- @COMPONENT: ToastContainer [notification system] -->
+        <div id="toast-container" class="fixed bottom-4 right-4 space-y-2 z-50">
+            <!-- Toast messages will be dynamically inserted here -->
+        </div>
+        <!-- @END_COMPONENT: ToastContainer -->
+
+    </div>
+    <!-- @END_COMPONENT: App -->
+
+    <script>
+    (function() {
+        // @STATE: currentScreen:string = 'camera', darkMode:boolean = false
+        let currentScreen = 'camera';
+        let darkMode = false;
+        let openCard = null;
+        let cardData = {};
+
+        // Theme Toggle
+        const themeToggle = document.getElementById('theme-toggle');
+        const html = document.documentElement;
+
+        function toggleTheme() {
+            darkMode = !darkMode;
+            if (darkMode) {
+                html.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+            } else {
+                html.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+            }
+        }
+
+        // Initialize theme
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            darkMode = true;
+            html.classList.add('dark');
+        }
+
+        themeToggle.addEventListener('click', toggleTheme);
+
+        // Screen Navigation
+        function showScreen(screen) {
+            document.querySelectorAll('#camera-screen, #processing-screen, #analysis-screen').forEach(el => {
+                el.classList.add('hidden');
+            });
+            document.getElementById(screen + '-screen').classList.remove('hidden');
+            currentScreen = screen;
+        }
+
+        // Camera Capture Simulation
+        document.getElementById('capture-btn').addEventListener('click', function() {
+            // TODO: Implement actual camera capture using getUserMedia API
+            showScreen('processing');
+            
+            // Simulate AI processing
+            setTimeout(() => {
+                showScreen('analysis');
+            }, 3000);
+        });
+
+        // Card Toggle Logic
+        function toggleCard(cardName) {
+            const card = document.querySelector(`[data-card="${cardName}"]`).closest('.analysis-card');
+            const content = card.querySelector('.card-content');
+            const chevron = card.querySelector('.card-chevron');
+            const isOpen = !content.classList.contains('hidden');
+
+            // Close all other cards
+            document.querySelectorAll('.analysis-card').forEach(otherCard => {
+                if (otherCard !== card) {
+                    const otherContent = otherCard.querySelector('.card-content');
+                    const otherChevron = otherCard.querySelector('.card-chevron');
+                    otherContent.classList.add('hidden');
+                    otherChevron.style.transform = 'rotate(0deg)';
+                    otherCard.classList.remove('expanded');
+                }
+            });
+
+            if (isOpen) {
+                // Close this card
+                content.classList.add('hidden');
+                chevron.style.transform = 'rotate(0deg)';
+                card.classList.remove('expanded');
+                openCard = null;
+            } else {
+                // Open this card
+                content.classList.remove('hidden');
+                chevron.style.transform = 'rotate(180deg)';
+                card.classList.add('expanded');
+                openCard = cardName;
+
+                // Load data if first time
+                if (!cardData[cardName]) {
+                    loadCardData(cardName);
+                }
+            }
+        }
+
+        // Card Data Loading
+        function loadCardData(cardName) {
+            const card = document.querySelector(`[data-card="${cardName}"]`).closest('.analysis-card');
+            const loadingState = card.querySelector('.loading-state');
+            const dataElement = card.querySelector(`.${cardName}-data`);
+
+            loadingState.classList.remove('hidden');
+            
+            // TODO: Implement actual AI API calls for each card type
+            // Simulate API call
+            setTimeout(() => {
+                loadingState.classList.add('hidden');
+                dataElement.classList.remove('hidden');
+                cardData[cardName] = true;
+                
+                showToast(`${cardName.charAt(0).toUpperCase() + cardName.slice(1)} data loaded successfully`, 'success');
+            }, 2000);
+        }
+
+        // Card Event Listeners
+        document.querySelectorAll('.card-trigger').forEach(button => {
+            button.addEventListener('click', function() {
+                const cardName = this.getAttribute('data-card');
+                toggleCard(cardName);
+            });
+        });
+
+        // Chat Functionality
+        function sendChatMessage(message) {
+            if (!message.trim()) return;
+
+            const chatMessages = document.querySelector('.chat-messages');
+            const userMessage = createChatMessage(message, 'user');
+            chatMessages.appendChild(userMessage);
+
+            // Clear input
+            const input = document.querySelector('[data-bind="chatInput"]');
+            input.value = '';
+
+            // TODO: Implement actual AI chat response
+            // Simulate AI response
+            setTimeout(() => {
+                const aiResponse = createChatMessage('Thanks for your question! Based on the product information, I can help you with that.', 'ai');
+                chatMessages.appendChild(aiResponse);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }, 1000);
+
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function createChatMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = sender === 'user' ? 'flex justify-end' : 'bg-secondary p-3 rounded-xl';
+
+            if (sender === 'user') {
+                messageDiv.innerHTML = `
+                    <div class="bg-primary text-primary-foreground p-3 rounded-xl max-w-xs">
+                        <p class="text-sm">${text}</p>
+                    </div>
+                `;
+            } else {
+                messageDiv.innerHTML = `
+                    <div class="flex items-start space-x-2">
+                        <div class="w-6 h-6 bg-primary rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <i class="fas fa-robot text-primary-foreground text-xs"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-sm">${text}</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            return messageDiv;
+        }
+
+        // Chat Input Handler
+        document.addEventListener('keypress', function(e) {
+            if (e.target.matches('[data-bind="chatInput"]') && e.key === 'Enter') {
+                sendChatMessage(e.target.value);
+            }
+        });
+
+        // Toast Notification System
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const bgColor = {
+                success: 'bg-green-500',
+                error: 'bg-red-500',
+                info: 'bg-primary'
+            }[type] || 'bg-primary';
+
+            toast.className = `${bgColor} text-white px-4 py-3 rounded-xl shadow-lg transform translate-x-full transition-transform duration-300 flex items-center space-x-2`;
+            
+            toast.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check' : type === 'error' ? 'exclamation-triangle' : 'info-circle'}"></i>
+                <span class="text-sm">${message}</span>
+            `;
+            
+            container.appendChild(toast);
+            
+            // Animate in
+            setTimeout(() => {
+                toast.classList.remove('translate-x-full');
+            }, 100);
+            
+            // Auto remove
+            setTimeout(() => {
+                toast.classList.add('translate-x-full');
+                setTimeout(() => {
+                    container.removeChild(toast);
+                }, 300);
+            }, 3000);
+        }
+
+        // Additional Event Listeners
+        document.addEventListener('click', function(e) {
+            // Scan Another Button
+            if (e.target.closest('[data-event="click:scanAnother"]')) {
+                showScreen('camera');
+                // Reset card data
+                cardData = {};
+                openCard = null;
+            }
+            
+            // Send Message Button
+            if (e.target.closest('[data-event="click:sendMessage"]')) {
+                const input = document.querySelector('[data-bind="chatInput"]');
+                sendChatMessage(input.value);
+            }
+        });
+
+        // Initialize app
+        showScreen('camera');
+        
+        // Show demo toast
+        setTimeout(() => {
+            showToast('Point your camera at a product label to get started!', 'info');
+        }, 1000);
+
+    })();
+    </script>
+</body>
+</html>

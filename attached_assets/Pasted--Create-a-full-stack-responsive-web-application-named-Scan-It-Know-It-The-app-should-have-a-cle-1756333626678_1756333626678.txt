@@ -1,0 +1,28 @@
+
+Create a full-stack, responsive web application named "Scan It Know It." The app should have a clean, modern design with a light mode and a dark mode toggle. The UI and user flow should follow the provided images and descriptions.
+
+**Application Flow:**
+1.  **Home/Camera Screen:** A home screen with an interactive camera feed. The user can take a picture, switch between front/back cameras, or select multiple pictures from their photo gallery.
+2.  **Initial AI Processing:** After a photo is selected, an initial AI agent is called to:
+    * Identify the product or object in the image and get the info anbout it.
+    * Extract all text from the image and store it in a JSON file.
+ 
+
+**Product Analysis Screen:**
+* Display a screen with the header "Product Name" (identified by the AI) and the 5-line product summary(prompt for AI call "As a product analyst, summarize the key features of the product based on the provided text. Focus on the what is it for and how to use it, Do not include any extra commentary keep ur responce to be shot and to the point but do not miss the main details. with in 5 lines").
+* The screen must feature four collapsible/expandable cards: "What are the Ingredients?", "How about calories?", "Reddit reviews," and "Q&A."
+* **Only one card can be open at a time.** When a new card is opened, any previously open card must collapse.
+
+**On-Demand Card Actions:**
+* **First Click:** When a user clicks on any card for the first time, a specific AI agent is called. It fetches the required information and saves it to a local state. The card then expands to display this data.
+* **Subsequent Clicks:** Once a card has been opened and its data fetched, subsequent clicks on the same card will only toggle its expanded/collapsed state. The AI will not be called again for that card.
+
+**Card-Specific Details:**
+* **"What are the Ingredients?":** On first open, the AI extracts a list of ingredients from the JSON data. For each ingredient and check if those are harmfil, it also provides a brief analysis, such as "affects skin," "not legal in EU," or "increase inflammation.(prompt for ai call "You are a food scientist. From the following product label, list all of the ingredients, exactly as they are written. Do not 
+As a product health analyst, identify if the following extracted ingredient list is considered harmful. Base your answer on widely accepted health standards from organizations like the FDA, CPSC, and EU health agencies. For each ingredient, provide a specific, 3-4 word reason for its harmfulness, or simply state 'Safe' if it's not")"
+* **"How about calories?":** On first open, the AI extracts the calories per serving and the specific types of sugars from the JSON data(Ai Agent prompt "From the provided nutritional information, extract the total calories and sugar content with types of sugers from the extracted information from the images. Provide only the numbers and their units. Do not include any other text or commentary.").
+* **"Reddit reviews":** On first open, the AI searches Reddit for reviews on the product and then provides a summarized list of pros and cons.(ai apgent prompt "Based on the following product text and reddit web search results, provide a brief summary of the overall customer sentiment and key highlights from reviews. Do not include any personal opinions or other text.")
+* **"Q&A":** This section acts as a live chat. When first opened, it displays a prompt. Each user question within the chat will trigger a new AI call to provide a conversational response based on the product data.(prompt for AI agent "This prompt is for the chatbot. It instructs the AI to answer a user's question using only the provided text and to be honest if the information is not present.")
+
+**Technical Requirements:**
+* The platform must generate a full-stack application.
