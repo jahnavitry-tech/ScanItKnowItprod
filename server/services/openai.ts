@@ -22,6 +22,9 @@ const DEMO_MODE = false;
 const VISION_MODEL = "meta-llama/llama-4-scout:free";
 const ANALYSIS_MODEL = "google/gemini-2.0-flash-exp:free";
 
+// Define the correct host, defaulting to the Render variable
+const APP_HOST = process.env.RENDER_EXTERNAL_URL || "https://scan-it-know-it-prod.onrender.com";
+
 export async function identifyProductAndExtractText(base64Image: string): Promise<{
   productName: string;
   extractedText: any;
@@ -74,7 +77,7 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
       ],
     }, {
       headers: {
-        "HTTP-Referer": "https://scan-it-know-it.replit.app",
+        "HTTP-Referer": APP_HOST,
         "X-Title": "Scan It Know It"
       }
     });
@@ -153,7 +156,7 @@ export async function analyzeIngredients(extractedText: any): Promise<any> {
       ],
     }, {
       headers: {
-        "HTTP-Referer": "https://scan-it-know-it.replit.app",
+        "HTTP-Referer": APP_HOST,
         "X-Title": "Scan It Know It"
       }
     });
@@ -229,7 +232,7 @@ export async function analyzeNutrition(extractedText: any): Promise<any> {
       ],
     }, {
       headers: {
-        "HTTP-Referer": "https://scan-it-know-it.replit.app",
+        "HTTP-Referer": APP_HOST,
         "X-Title": "Scan It Know It"
       }
     });
@@ -280,7 +283,7 @@ export async function analyzeNutrition(extractedText: any): Promise<any> {
         ],
       }, {
         headers: {
-          "HTTP-Referer": "https://scan-it-know-it.replit.app",
+          "HTTP-Referer": APP_HOST,
           "X-Title": "Scan It Know It"
       }
       });
@@ -352,7 +355,7 @@ Answer the user's question using the provided product data first. If the answer 
       ],
     }, {
       headers: {
-        "HTTP-Referer": "https://scan-it-know-it.replit.app",
+        "HTTP-Referer": APP_HOST,
         "X-Title": "Scan It Know It"
       }
     });
@@ -384,7 +387,7 @@ Answer based only on the product data provided.`
         ],
       }, {
         headers: {
-          "HTTP-Referer": "https://scan-it-know-it.replit.app",
+          "HTTP-Referer": APP_HOST,
           "X-Title": "Scan It Know It"
         }
       });
