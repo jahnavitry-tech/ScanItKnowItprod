@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { 
   analyzeImageWithVision, 
   analyzeIngredientsHF, 
@@ -6,21 +6,18 @@ import {
   generateChatResponseHF 
 } from "./huggingface";
 
-// Using OpenRouter with specific models as requested
-const openai = new OpenAI({ 
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY
-});
+// Using Google Gemini API with specific models as requested
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-// Flag to use HuggingFace instead of OpenRouter to avoid rate limits
+// Flag to use HuggingFace instead of Google to avoid rate limits
 const USE_HUGGINGFACE = false;
 
 // Demo mode disabled - using real HuggingFace API
 const DEMO_MODE = false;
 
 // Use the recommended models for each task
-const VISION_MODEL = "meta-llama/llama-4-scout:free";
-const ANALYSIS_MODEL = "google/gemini-2.0-flash-exp:free";
+const VISION_MODEL = "gemini-1.5-flash";
+const ANALYSIS_MODEL = "gemini-2.0-flash";
 
 // Define the correct host, defaulting to the Render variable
 const APP_HOST = process.env.RENDER_EXTERNAL_URL || "https://scan-it-know-it-prod.onrender.com";
@@ -45,65 +42,53 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
     };
   }
 
-  // Use HuggingFace free API instead of OpenRouter to avoid rate limits
+  // Use HuggingFace free API instead of Google to avoid rate limits
   if (USE_HUGGINGFACE) {
     try {
       return await analyzeImageWithVision(base64Image);
     } catch (error) {
       console.error("Error with HuggingFace vision:", error);
-      // Fall back to OpenRouter if HuggingFace fails
+      // Fall back to Google if HuggingFace fails
     }
   }
 
   try {
-    const response = await openai.chat.completions.create({
-      model: VISION_MODEL, // Using the recommended free vision model
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "You are a product identification expert. Analyze this image to identify the product and extract all visible text including ingredients and nutrition facts. For the summary, act as a product analyst and summarize the key features based on the provided text. Focus on what it is for and how to use it. Do not include any extra commentary, keep your response short and to the point but do not miss the main details, within 5 lines. Respond with valid JSON only in this exact format: { \"productName\": \"string\", \"extractedText\": {\"ingredients\": \"string\", \"nutrition\": \"string\", \"brand\": \"string\"}, \"summary\": \"string\" }"
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:image/jpeg;base64,${base64Image}`
-              }
-            }
-          ],
-        },
-      ],
-    }, {
-      headers: {
-        "HTTP-Referer": APP_HOST,
-        "X-Title": "Scan It Know It"
-      }
-    });
-
-    const content = response.choices[0].message.content || "";
-    let result;
+    const model = genAI.getGenerativeModel({ model: VISION_MODEL });
+    
+    const prompt = "You are a product identification expert. Analyze this image to identify the product and extract all visible text including ingredients and nutrition facts. For the summary, act as a product analyst and summarize the key features based on the provided text. Focus on what it is for and how to use it. Do not include any extra commentary, keep your response short and to the point but do not miss the main details, within 5 lines. Respond with valid JSON only in this exact format: { \"productName\": \"string\", \"extractedText\": {\"ingredients\": \"string\", \"nutrition\": \"string\", \"brand\": \"string\"}, \"summary\": \"string\" }";
+    
+    const image = {
+      inlineData: {
+        data: base64Image,
+        mimeType: "image/jpeg",
+      },
+    };
+    
+    const result = await model.generateContent([prompt, image]);
+    const response = await result.response;
+    const content = response.text() || "";
+    
+    let resultData;
     
     try {
       // Try to parse the entire response as JSON
-      result = JSON.parse(content);
+      resultData = JSON.parse(content);
     } catch (e) {
       // If that fails, try to extract JSON from the response
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
-          result = JSON.parse(jsonMatch[0]);
+          resultData = JSON.parse(jsonMatch[0]);
         } catch (e2) {
           // Fallback to parsing the content manually
-          result = {
+          resultData = {
             productName: "Unknown Product",
             extractedText: {},
             summary: content || "Unable to analyze product"
           };
         }
       } else {
-        result = {
+        resultData = {
           productName: "Unknown Product", 
           extractedText: {},
           summary: content || "Unable to analyze product"
@@ -112,9 +97,9 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
     }
     
     return {
-      productName: result.productName || "Unknown Product",
-      extractedText: result.extractedText || {},
-      summary: result.summary || "Unable to analyze product"
+      productName: resultData.productName || "Unknown Product",
+      extractedText: resultData.extractedText || {},
+      summary: resultData.summary || "Unable to analyze product"
     };
   } catch (error) {
     console.error("Error identifying product:", error);
@@ -140,28 +125,18 @@ export async function analyzeIngredients(extractedText: any): Promise<any> {
     };
   }
 
-  // First try with OpenRouter and web search model
+  // First try with Google and web search model
   try {
-    const response = await openai.chat.completions.create({
-      model: ANALYSIS_MODEL, // Using the recommended analysis model with grounding
-      messages: [
-        {
-          role: "system",
-          content: "You are a food safety scientist. Use a real-time web search to ground your analysis on current safety warnings and health standards. For each ingredient, provide a specific, concise safety rating and a 3-4 word reason. Respond with valid JSON only in this exact format: { \"ingredients\": [{ \"name\": \"string\", \"safety\": \"Safe|Moderate|Harmful\", \"reason\": \"string\" }] }"
-        },
-        {
-          role: "user",
-          content: `Analyze the ingredients from this product data: ${JSON.stringify(extractedText)}. Use a real-time web search to ground your analysis on current safety warnings and health standards. Return only valid JSON without any additional text.`
-        },
-      ],
-    }, {
-      headers: {
-        "HTTP-Referer": APP_HOST,
-        "X-Title": "Scan It Know It"
-      }
-    });
-
-    const content = response.choices[0].message.content || "";
+    const model = genAI.getGenerativeModel({ model: ANALYSIS_MODEL });
+    
+    const prompt = `You are a food safety scientist. Use a real-time web search to ground your analysis on current safety warnings and health standards. For each ingredient, provide a specific, concise safety rating and a 3-4 word reason. Respond with valid JSON only in this exact format: { "ingredients": [{ "name": "string", "safety": "Safe|Moderate|Harmful", "reason": "string" }] }
+    
+    Analyze the ingredients from this product data: ${JSON.stringify(extractedText)}. Use a real-time web search to ground your analysis on current safety warnings and health standards. Return only valid JSON without any additional text.`;
+    
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const content = response.text() || "";
+    
     try {
       return JSON.parse(content);
     } catch (e) {
@@ -194,7 +169,7 @@ export async function analyzeIngredients(extractedText: any): Promise<any> {
           {
             name: "Rate Limit Reached",
             safety: "Safe",
-            reason: "OpenRouter free tier limit reached. Please add credits to continue analysis or try again later."
+            reason: "Google free tier limit reached. Please add credits to continue analysis or try again later."
           }
         ]
       };
@@ -218,26 +193,16 @@ export async function analyzeNutrition(extractedText: any): Promise<any> {
 
   try {
     // Use web search model for real-time grounding
-    const response = await openai.chat.completions.create({
-      model: ANALYSIS_MODEL, // Using the recommended analysis model with grounding
-      messages: [
-        {
-          role: "system",
-          content: "You are a nutrition analyst. Extract the total calories, total sugars, and a breakdown of sugar types. If data is unclear, use a real-time web search to confirm standard nutritional facts for the product. Respond with valid JSON only in this exact format: { \"calories\": number, \"totalSugars\": \"string\", \"sugarTypes\": [{ \"type\": \"string\", \"amount\": \"string\" }] }"
-        },
-        {
-          role: "user",
-          content: `Extract nutrition data from: ${JSON.stringify(extractedText)}. If data is unclear, use a real-time web search to confirm standard nutritional facts for the product. Return only valid JSON without any additional text.`
-        },
-      ],
-    }, {
-      headers: {
-        "HTTP-Referer": APP_HOST,
-        "X-Title": "Scan It Know It"
-      }
-    });
-
-    const content = response.choices[0].message.content || "";
+    const model = genAI.getGenerativeModel({ model: ANALYSIS_MODEL });
+    
+    const prompt = `You are a nutrition analyst. Extract the total calories, total sugars, and a breakdown of sugar types. If data is unclear, use a real-time web search to confirm standard nutritional facts for the product. Respond with valid JSON only in this exact format: { "calories": number, "totalSugars": "string", "sugarTypes": [{ "type": "string", "amount": "string" }] }
+    
+    Extract nutrition data from: ${JSON.stringify(extractedText)}. If data is unclear, use a real-time web search to confirm standard nutritional facts for the product. Return only valid JSON without any additional text.`;
+    
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const content = response.text() || "";
+    
     try {
       return JSON.parse(content);
     } catch (e) {
@@ -261,7 +226,7 @@ export async function analyzeNutrition(extractedText: any): Promise<any> {
         sugarTypes: [
           {
             type: "Rate Limit Notice",
-            amount: "OpenRouter free tier limit reached. Please add credits to continue analysis."
+            amount: "Google free tier limit reached. Please add credits to continue analysis."
           }
         ]
       };
@@ -269,26 +234,16 @@ export async function analyzeNutrition(extractedText: any): Promise<any> {
     
     // Fall back to the original model if web search model fails
     try {
-      const response = await openai.chat.completions.create({
-        model: "mistralai/mistral-small-3.2-24b-instruct:free",
-        messages: [
-          {
-            role: "system",
-            content: "From the provided nutritional information, extract the total calories and sugar content with types of sugars from the extracted information. Provide only the numbers and their units. Do not include any other text or commentary. Respond with valid JSON only in this exact format: { \"calories\": number, \"totalSugars\": \"string\", \"sugarTypes\": [{ \"type\": \"string\", \"amount\": \"string\" }] }"
-          },
-          {
-            role: "user",
-            content: `Extract nutrition data from: ${JSON.stringify(extractedText)}. Return only valid JSON without any additional text.`
-          },
-        ],
-      }, {
-        headers: {
-          "HTTP-Referer": APP_HOST,
-          "X-Title": "Scan It Know It"
-      }
-      });
-
-      const content = response.choices[0].message.content || "";
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      
+      const prompt = `From the provided nutritional information, extract the total calories and sugar content with types of sugars from the extracted information. Provide only the numbers and their units. Do not include any other text or commentary. Respond with valid JSON only in this exact format: { "calories": number, "totalSugars": "string", "sugarTypes": [{ "type": "string", "amount": "string" }] }
+      
+      Extract nutrition data from: ${JSON.stringify(extractedText)}. Return only valid JSON without any additional text.`;
+      
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const content = response.text() || "";
+      
       try {
         return JSON.parse(content);
       } catch (e) {
@@ -337,62 +292,42 @@ export async function generateChatResponse(question: string, productData: any): 
 
   try {
     // Use web search model for real-time grounding
-    const response = await openai.chat.completions.create({
-      model: ANALYSIS_MODEL, // Using the recommended analysis model with grounding
-      messages: [
-        {
-          role: "system",
-          content: "You are a user-facing chatbot. Answer the user's question using the provided product data first. If the answer requires current external context (e.g., price, news), use a real-time web search to find the most up-to-date information before answering. Be concise and helpful."
-        },
-        {
-          role: "user",
-          content: `Product data: ${JSON.stringify(productData)}
-
-User question: ${question}
-
-Answer the user's question using the provided product data first. If the answer requires current external context (e.g., price, news), use a real-time web search to find the most up-to-date information before answering.`
-        },
-      ],
-    }, {
-      headers: {
-        "HTTP-Referer": APP_HOST,
-        "X-Title": "Scan It Know It"
-      }
-    });
-
-    return response.choices[0].message.content || "I'm sorry, I couldn't generate a response to that question.";
+    const model = genAI.getGenerativeModel({ model: ANALYSIS_MODEL });
+    
+    const prompt = `You are a user-facing chatbot. Answer the user's question using the provided product data first. If the answer requires current external context (e.g., price, news), use a real-time web search to find the most up-to-date information before answering. Be concise and helpful.
+    
+    Product data: ${JSON.stringify(productData)}
+    
+    User question: ${question}
+    
+    Answer the user's question using the provided product data first. If the answer requires current external context (e.g., price, news), use a real-time web search to find the most up-to-date information before answering.`;
+    
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    
+    return response.text() || "I'm sorry, I couldn't generate a response to that question.";
   } catch (error) {
     console.error("Error generating chat response:", error);
     if (error instanceof Error && error.message.includes("Rate limit exceeded")) {
-      return "I've reached the daily rate limit for OpenRouter's free tier. To continue using the AI chat feature, you can add credits to your OpenRouter account or try again tomorrow when the limit resets.";
+      return "I've reached the daily rate limit for Google's free tier. To continue using the AI chat feature, you can add credits to your Google account or try again tomorrow when the limit resets.";
     }
     
     // Fall back to the original model if web search model fails
     try {
-      const response = await openai.chat.completions.create({
-        model: "mistralai/mistral-small-3.2-24b-instruct:free",
-        messages: [
-          {
-            role: "system",
-            content: "This prompt is for the chatbot. Answer the user's question using only the provided product data and be honest if the information is not present. Be helpful and concise."
-          },
-          {
-            role: "user",
-            content: `Product data: ${JSON.stringify(productData)}
-
-User question: ${question}
-
-Answer based only on the product data provided.`
-          },
-        ],
-      }, {
-        headers: {
-          "HTTP-Referer": APP_HOST,
-          "X-Title": "Scan It Know It"
-        }
-      });
-
-      return response.choices[0].message.content || "I'm sorry, I couldn't generate a response to that question.";
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      
+      const prompt = `This prompt is for the chatbot. Answer the user's question using only the provided product data and be honest if the information is not present. Be helpful and concise.
+      
+      Product data: ${JSON.stringify(productData)}
+      
+      User question: ${question}
+      
+      Answer based only on the product data provided.`;
+      
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      
+      return response.text() || "I'm sorry, I couldn't generate a response to that question.";
     } catch (fallbackError) {
       console.error("Error in fallback chat response:", fallbackError);
       return "Sorry, I encountered an error while processing your question. Please try again.";
