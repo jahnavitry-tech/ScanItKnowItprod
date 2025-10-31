@@ -1,0 +1,74 @@
+The core problem of the screen staying on **"Starting camera..."** is a problem in the camera initialization logic within your custom hook, **`useCamera`**, since your current component code is correct for displaying the status.
+
+Here are the issues and the fix for your `CameraScreen.tsx` component, plus the critical advice for your **`useCamera` hook**.
+
+### 1\. 🛑 Immediate Component Fix (Prevent Switch Flickering)
+
+You must remove the redundant `useEffect` that manually stops and starts the camera when `facingMode` changes. This only causes issues if the camera is already running.
+
+**Remove this block from your `CameraScreen.tsx`:**
+
+```typescript
+// ❌ REMOVE THIS BLOCK
+  useEffect(() => {
+    if (isStreaming) { 
+      stopCamera();
+      startCamera();
+    }
+  }, [facingMode]); 
+```
+
+### 2\. 🛠️ Critical Fix: The `useCamera` Hook
+
+The "Starting camera..." state means your `startCamera` function is not resolving properly. This is almost always due to one of three things. **You must verify the code inside your `useCamera` hook.**
+
+| Issue | What to Check in `useCamera` | How to Fix |
+| :--- | :--- | :--- |
+| **Silent Error/Hang** | The `navigator.mediaDevices.getUserMedia` call is failing or hanging but not setting the `error` state. | **Add `try...catch` and set `error` state.** The `catch` block must set your state: `setError(e.name || 'Unknown camera error');` |
+| **Permission Blocked** | The browser pop-up to ask for permission was blocked or hasn't appeared. The promise hangs indefinitely. | **Check your browser console** for a `NotAllowedError`. You need to handle this by displaying the error on the screen. |
+| **Missing Ref** | The `videoRef.current` is not available when `startCamera` is called, so the stream starts but cannot be attached to the `<video>` element. | Ensure the video element is rendered or use an `onLoadedMetadata` event on the video tag to check stream readiness, though setting `isStreaming` to `true` should usually be enough. |
+
+#### Conceptual `useCamera` Hook Logic
+
+Ensure your `startCamera` function (in `use-camera.ts`) looks like this:
+
+```typescript
+// Inside use-camera.ts (Conceptual)
+
+const startCamera = async (newFacingMode = initialMode) => {
+    // 1. Reset state
+    setIsStreaming(false);
+    setError(null);
+    
+    // 2. Define constraints
+    const constraints = {
+        video: { facingMode: newFacingMode, aspectRatio: { ideal: 0.75 } }
+    };
+    
+    try {
+        // 3. Get the stream (This is where it hangs if permission is denied or device busy)
+        const stream = await navigator.mediaDevices.getUserMedia(constraints); 
+
+        // 4. Set the video source
+        if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            // Add an event listener to check when the video is actually playing
+            videoRef.current.onloadedmetadata = () => {
+                // 5. Update state only when ready
+                setIsStreaming(true); 
+            };
+        }
+        
+        // Save the stream globally to stop it later
+        setMediaStream(stream); 
+
+    } catch (e) {
+        // 🚨 CRITICAL: This is how you escape the "Starting..." state on failure
+        console.error("Camera failed to start:", e);
+        // Display the user-friendly error message
+        setError(e.message || 'Camera access denied or device is busy.'); 
+    }
+};
+```
+
+**Next Step:** Please check your browser's **Developer Console** for any errors or warnings (especially those starting with `NotAllowedError` or `OverconstrainedError`) when the screen is stuck on "Starting camera...". This message will tell us exactly why `getUserMedia` is failing.
