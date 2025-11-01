@@ -16,8 +16,8 @@ const USE_HUGGINGFACE = false;
 const DEMO_MODE = false;
 
 // Use the recommended models for each task
-const VISION_MODEL = "gemini-1.5-flash";
-const ANALYSIS_MODEL = "gemini-2.0-flash";
+const VISION_MODEL = "gemini-2.5-flash";
+const ANALYSIS_MODEL = "gemini-2.5-flash";
 
 // Define the correct host, defaulting to the Render variable
 const APP_HOST = process.env.RENDER_EXTERNAL_URL || "https://scan-it-know-it-prod.onrender.com";
