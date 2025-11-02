@@ -1,90 +1,102 @@
-export async function searchRedditReviews(productName: string): Promise<any> {
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+async function analyzeRedditDataWithAI(productName: string, reviewText: string) {
   try {
-    // Use Reddit API to search for product reviews
-    const searchQuery = encodeURIComponent(`${productName} review`);
-    const url = `https://www.reddit.com/search.json?q=${searchQuery}&sort=relevance&limit=50`;
+    // Initialize Google Generative AI client inside the function to ensure env vars are loaded
+    console.log("Initializing Google Generative AI with API key:", process.env.GEMINI_API_KEY ? "Present" : "Missing");
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'ScanItKnowIt/1.0'
-      }
+    const prompt = `You are a product review sentiment analysis expert. Based on the provided product name and details, conduct relevant Reddit web searches and provide a brief summary of the overall customer sentiment. Analyze the gathered Reddit reviews to extract up to 4 pros and up to 4 cons (as many as you can find, but no more than 4 each), and calculate an overall average rating (1.0-5.0). Your output MUST be a valid JSON object with the following structure: { "pros": ["string"], "cons": ["string"], "averageRating": number, "totalMentions": number, "reviews": [{"title": "string", "score": number, "url": "string"}] }. Do not add any extra text or markdown fences. Each array element must be a single, independent bullet point summary. The totalMentions and reviews fields are placeholders that will be replaced, but include them in the structure.
+    
+    Required Output Format:
+    [A single, short sentence summarizing the overall sentiment, including the average rating.]
+    
+    -for PROS (Positive Highlights):["[Specific positive point 1 and citation]","[Specific positive point 2 and citation]","[Specific positive point 3 and citation]","[Specific positive point 4 and citation]"]
+    -for CONS (Negative Highlights): ["[Specific negative point 1 and citation]","[Specific negative point 2 and citation]","[Specific negative point 3 and citation]","[Specific negative point 4 and citation]"]
+    
+    If the review text is empty, non-substantive, or you cannot find any clear pros or cons, use these default helpful strings:
+    - For pros: ["Generally well-regarded product", "Satisfies basic expectations", "Good value for money", "Reliable brand"]
+    - For cons: ["Limited detailed feedback on Reddit", "No major complaints found", "Some users report minor issues", "Could benefit from more reviews"]
+    
+    Analyze reviews for: ${productName}
+    
+    Reviews:
+    ${reviewText}
+    
+    Extract as many pros and cons as you can find (up to 4 each), and calculate an average rating (1-5). Return a valid JSON object with the exact structure specified. Do not include any markdown formatting or code blocks in your response. Unmixed lists of key highlights by rigidly classifying them as PROS (Positive Sentiments) and CONS (Negative Sentiments).
+    
+    CRITICAL INSTRUCTION: Return ONLY the JSON object and nothing else. No explanations, no additional text, no markdown. Just the JSON object.`;
+    
+    // Explicitly enable Google Search for grounding - using the correct tool name with type assertion
+    const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        tools: [{ googleSearch: {} } as any]
     });
 
-    if (!response.ok) {
-      throw new Error(`Reddit API error: ${response.status}`);
-    }
-
-    const data = await response.json();
+    const response = await result.response;
+    let content = response.text() || "";
     
-    // Process Reddit data to extract relevant information
-    const posts = data.data?.children || [];
-    const reviews = posts
-      .filter((post: any) => 
-        post.data.title.toLowerCase().includes('review') ||
-        post.data.selftext.toLowerCase().includes('review')
-      )
-      .slice(0, 10);
-
-    // Analyze sentiment and extract pros/cons
-    const pros = [];
-    const cons = [];
-    let totalScore = 0;
-    let scoreCount = 0;
-
-    for (const review of reviews) {
-      const text = (review.data.title + ' ' + review.data.selftext).toLowerCase();
-      
-      // Simple keyword-based sentiment analysis
-      if (text.includes('great') || text.includes('love') || text.includes('good') || text.includes('amazing')) {
-        pros.push(extractKeyPhrase(text, ['taste', 'value', 'quality', 'healthy']));
-      }
-      
-      if (text.includes('bad') || text.includes('terrible') || text.includes('hate') || text.includes('awful')) {
-        cons.push(extractKeyPhrase(text, ['expensive', 'sugar', 'taste', 'soggy']));
-      }
-
-      // Extract numeric scores if present
-      const scoreMatch = text.match(/(\d+)\/(\d+)/);
-      if (scoreMatch) {
-        const score = parseInt(scoreMatch[1]) / parseInt(scoreMatch[2]) * 5;
-        totalScore += score;
-        scoreCount++;
-      }
+    // Log the raw response for debugging
+    console.log("Raw AI response:", content.substring(0, 500));
+    
+    // Remove markdown code fences if present
+    content = content.replace(/```json\s*|\s*```/g, '').trim();
+    
+    // Try to extract JSON from the response if it contains extra text
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      content = jsonMatch[0];
     }
-
-    const averageScore = scoreCount > 0 ? totalScore / scoreCount : 3.5;
-
-    return {
-      pros: pros.slice(0, 4),
-      cons: cons.slice(0, 4),
-      averageRating: Math.round(averageScore * 10) / 10,
-      totalMentions: reviews.length,
-      reviews: reviews.slice(0, 5).map((r: any) => ({
-        title: r.data.title,
-        score: r.data.score,
-        url: `https://reddit.com${r.data.permalink}`
-      }))
-    };
-
+    
+    // Since we're using a structured prompt, we can rely on standard JSON.parse
+    try {
+      const parsed = JSON.parse(content);
+      console.log("Successfully parsed JSON:", parsed);
+      return parsed;
+    } catch (e) {
+      // Log the failure but throw a cleaner error
+      console.error("Failed to parse AI-generated JSON. Content received:", content.substring(0, 500), e);
+      throw new Error("AI did not return valid structured JSON.");
+    }
+    
   } catch (error) {
-    console.error("Error searching Reddit reviews:", error);
-    
-    // Return fallback data structure if Reddit API fails
-    return {
-      pros: ["Great taste", "Heart healthy", "Good value", "Kids love it"],
-      cons: ["High in sugar", "Gets soggy fast", "Artificial taste", "Pricey"],
-      averageRating: 3.4,
-      totalMentions: 127,
-      reviews: []
-    };
+    console.error("Error in AI analysis:", error);
+    throw error;
   }
 }
 
-function extractKeyPhrase(text: string, keywords: string[]): string {
-  for (const keyword of keywords) {
-    if (text.includes(keyword)) {
-      return keyword.charAt(0).toUpperCase() + keyword.slice(1);
-    }
+export async function searchRedditReviews(productName: string): Promise<any> {
+  try {
+    console.log("Searching Reddit reviews for product:", productName);
+    
+    // Instead of fetching from Reddit API, let the AI do the search directly
+    // Pass empty review text since the AI will conduct its own search
+    const reviewText = "";
+    
+    // --- AI Analysis ---
+    const aiResponse = await analyzeRedditDataWithAI(productName, reviewText);
+    
+    // Set default values for placeholders
+    aiResponse.reviews = [];
+    aiResponse.totalMentions = 0;
+    
+    console.log("Reddit analysis successful:", aiResponse);
+    return aiResponse;
+
+  } catch (error) {
+    console.error("Error in searchRedditReviews or AI analysis:", error);
+    
+    // Return a structured error response that matches the expected RedditData interface
+    const reason = error instanceof Error ? error.message : "Unknown API error";
+    
+    // Return fallback data structure if the API calls fail
+    return {
+      pros: [`Analysis Failed: ${reason.substring(0, 50)}...`],
+      cons: ["Data could not be retrieved from Reddit or analyzed by AI."],
+      averageRating: 1.0,
+      totalMentions: 0,
+      reviews: []
+    };
   }
-  return "Quality product";
 }

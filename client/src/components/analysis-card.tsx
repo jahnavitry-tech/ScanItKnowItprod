@@ -213,25 +213,78 @@ function IngredientsContent({ data }: { data: IngredientsData }) {
 function NutritionContent({ data }: { data: NutritionData }) {
   return (
     <div className="space-y-4">
+      {/* Main Nutrition Facts */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-secondary p-4 rounded-xl text-center">
           <div className="text-2xl font-bold text-primary">{data.calories || "N/A"}</div>
-          <div className="text-xs text-muted-foreground">Calories per serving</div>
+          <div className="text-xs text-muted-foreground">Calories</div>
         </div>
         <div className="bg-secondary p-4 rounded-xl text-center">
           <div className="text-2xl font-bold text-orange-600">{data.totalSugars || "N/A"}</div>
-          <div className="text-xs text-muted-foreground">Total sugars</div>
+          <div className="text-xs text-muted-foreground">Total Sugars</div>
         </div>
       </div>
-      
+
+      {/* Detailed Nutrition Values */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+          <div className="text-sm font-medium text-blue-700 dark:text-blue-300">Total Fat</div>
+          <div className="text-lg font-bold text-blue-900 dark:text-blue-100">{data.totalFat || "0"}g</div>
+        </div>
+        <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg">
+          <div className="text-sm font-medium text-purple-700 dark:text-purple-300">Sat. Fat</div>
+          <div className="text-lg font-bold text-purple-900 dark:text-purple-100">{data.saturatedFat || "0"}g</div>
+        </div>
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg">
+          <div className="text-sm font-medium text-yellow-700 dark:text-yellow-300">Sodium</div>
+          <div className="text-lg font-bold text-yellow-900 dark:text-yellow-100">{data.sodium || "0"}mg</div>
+        </div>
+        <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg">
+          <div className="text-sm font-medium text-green-700 dark:text-green-300">Protein</div>
+          <div className="text-lg font-bold text-green-900 dark:text-green-100">{data.totalProtein || "0"}g</div>
+        </div>
+        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-lg">
+          <div className="text-sm font-medium text-indigo-700 dark:text-indigo-300">Carbs</div>
+          <div className="text-lg font-bold text-indigo-900 dark:text-indigo-100">{data.totalCarbohydrate || "0"}g</div>
+        </div>
+        <div className="bg-pink-50 dark:bg-pink-900/20 p-3 rounded-lg">
+          <div className="text-sm font-medium text-pink-700 dark:text-pink-300">Fiber</div>
+          <div className="text-lg font-bold text-pink-900 dark:text-pink-100">{data.totalFiber || "0"}g</div>
+        </div>
+      </div>
+
+      {/* Added Sugars */}
+      {data.addedSugar && data.addedSugar !== "0g" && (
+        <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">
+          <div className="text-sm font-medium text-red-700 dark:text-red-300">Added Sugars</div>
+          <div className="text-lg font-bold text-red-900 dark:text-red-100">{data.addedSugar}</div>
+        </div>
+      )}
+
+      {/* Sugar Types */}
       {data.sugarTypes && data.sugarTypes.length > 0 && (
         <div className="space-y-2">
           <h4 className="font-medium text-sm">Sugar Types</h4>
           <div className="space-y-2">
             {data.sugarTypes.map((sugar, index) => (
-              <div key={index} className="flex justify-between text-sm">
+              <div key={index} className="flex justify-between text-sm bg-secondary p-2 rounded">
                 <span>{sugar.type}</span>
                 <span className="font-medium">{sugar.amount}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Vitamins */}
+      {data.vitamins && data.vitamins.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="font-medium text-sm">Vitamins & Minerals</h4>
+          <div className="space-y-2">
+            {data.vitamins.map((vitamin, index) => (
+              <div key={index} className="flex justify-between text-sm bg-secondary p-2 rounded">
+                <span>{vitamin.type}</span>
+                <span className="font-medium">{vitamin.amount}</span>
               </div>
             ))}
           </div>
