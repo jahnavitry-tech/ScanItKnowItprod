@@ -6,9 +6,6 @@ import {
   generateChatResponseHF 
 } from "./huggingface";
 
-// Using Google Gemini API with specific models as requested
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-
 // Flag to use HuggingFace instead of Google to avoid rate limits
 const USE_HUGGINGFACE = false;
 
@@ -19,14 +16,27 @@ const DEMO_MODE = false;
 const VISION_MODEL = "gemini-2.5-flash";
 const ANALYSIS_MODEL = "gemini-2.5-flash";
 
-// Define the correct host, defaulting to the Render variable
-const APP_HOST = process.env.RENDER_EXTERNAL_URL || "https://scan-it-know-it-prod.onrender.com";
-
 export async function identifyProductAndExtractText(base64Image: string): Promise<{
   productName: string;
   extractedText: any;
   summary: string;
 }> {
+  // Check for the preferred HuggingFace flag first
+  if (USE_HUGGINGFACE) {
+    return analyzeImageWithVision(base64Image);
+  }
+
+  // --- Start Gemini Logic ---
+  // Ensure environment variables are loaded before initialization
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+      console.error("GEMINI_API_KEY is missing. Initial image analysis cannot proceed.");
+      throw new Error("GEMINI_API_KEY is not configured.");
+  }
+  
+  // Initialize Google Generative AI client inside the function to guarantee API key availability
+  const genAI = new GoogleGenerativeAI(apiKey);
+
   if (DEMO_MODE) {
     // Return demo data for testing purposes
     await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
@@ -42,21 +52,11 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
     };
   }
 
-  // Use HuggingFace free API instead of Google to avoid rate limits
-  if (USE_HUGGINGFACE) {
-    try {
-      return await analyzeImageWithVision(base64Image);
-    } catch (error) {
-      console.error("Error with HuggingFace vision:", error);
-      // Fall back to Google if HuggingFace fails
-    }
-  }
-
   try {
     const model = genAI.getGenerativeModel({ model: VISION_MODEL });
     
     const prompt = "You are a product identification expert. Analyze this image to identify the product and extract all visible text including ingredients and nutrition facts. For the summary, act as a product analyst and summarize the key features based on the provided text. Focus on what it is for and how to use it. Do not include any extra commentary, keep your response short and to the point but do not miss the main details, within 5 lines. Respond with valid JSON only in this exact format: { \"productName\": \"string\", \"extractedText\": {\"ingredients\": \"string\", \"nutrition\": \"string\", \"brand\": \"string\"}, \"summary\": \"string\" }";
-    
+
     const image = {
       inlineData: {
         data: base64Image,
@@ -102,7 +102,14 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
       summary: resultData.summary || "Unable to analyze product"
     };
   } catch (error) {
-    console.error("Error identifying product:", error);
+    // --- CRITICAL FIX: Enhanced Logging ---
+    console.error("FATAL ERROR: Image Analysis (Vision API) failed immediately after upload.", error);
+    if (error instanceof Error) {
+        console.error("Error Message:", error.message);
+        console.error("Error Name:", error.name);
+    } else {
+        console.error("Non-Error Object Thrown:", error);
+    }
     throw new Error("Failed to identify product and extract text");
   }
 }
@@ -127,13 +134,26 @@ export async function analyzeIngredients(extractedText: any): Promise<any> {
 
   // First try with Google and web search model
   try {
+    // Initialize Google Generative AI client inside the function to ensure env vars are loaded
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("GEMINI_API_KEY is missing for ingredient analysis.");
+      throw new Error("GEMINI_API_KEY is not configured.");
+    }
+    const genAI = new GoogleGenerativeAI(apiKey);
+    
     const model = genAI.getGenerativeModel({ model: ANALYSIS_MODEL });
     
     const prompt = `You are a food safety scientist. Use a real-time web search to ground your analysis on current safety warnings and health standards. For each ingredient, provide a specific, concise safety rating and a 3-4 word reason. Respond with valid JSON only in this exact format: { "ingredients": [{ "name": "string", "safety": "Safe|Moderate|Harmful", "reason": "string" }] }
     
     Analyze the ingredients from this product data: ${JSON.stringify(extractedText)}. Use a real-time web search to ground your analysis on current safety warnings and health standards. Return only valid JSON without any additional text.`;
     
-    const result = await model.generateContent(prompt);
+    // Explicitly enable Google Search for grounding
+    const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        tools: [{ googleSearch: {} } as any]
+    });
+
     const response = await result.response;
     const content = response.text() || "";
     
@@ -183,23 +203,44 @@ export async function analyzeNutrition(extractedText: any): Promise<any> {
     await new Promise(resolve => setTimeout(resolve, 700));
     return {
       calories: 190,
+      totalFat: 6,
+      saturatedFat: 1,
+      sodium: 160,
+      totalCarbohydrate: 32,
+      totalFiber: 2,
+      totalProtein: 4,
       totalSugars: "11g",
+      addedSugar: "10g",
       sugarTypes: [
         { type: "Added Sugars", amount: "10g" },
         { type: "Natural Sugars", amount: "1g" }
+      ],
+      vitamins: [
+        { type: "Vitamin E", amount: "5mg" }
       ]
     };
   }
 
   try {
+    // Initialize Google Generative AI client inside the function to ensure env vars are loaded
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("GEMINI_API_KEY is missing for nutrition analysis.");
+      throw new Error("GEMINI_API_KEY is not configured.");
+    }
+    const genAI = new GoogleGenerativeAI(apiKey);
+    
     // Use web search model for real-time grounding
     const model = genAI.getGenerativeModel({ model: ANALYSIS_MODEL });
     
-    const prompt = `You are a nutrition analyst. Extract the total calories, total sugars, and a breakdown of sugar types. If data is unclear, use a real-time web search to confirm standard nutritional facts for the product. Respond with valid JSON only in this exact format: { "calories": number, "totalSugars": "string", "sugarTypes": [{ "type": "string", "amount": "string" }] }
+    const prompt = `From the Product name, extract the total calories and sugar content with types of sugars and Extract ALL essential nutritional values (Calories, Total Fat, Saturated Fat, Sodium, Total Carbohydrate, Dietary Fiber, Total Sugar, Added Sugar, and Protein). from the extracted information. Provide only the numbers and their units and names. Do not include any other text or commentary. Respond with valid JSON only in this exact format: { "calories": number, "totalFat": number, "saturatedFat": number, "sodium": number, "totalCarbohydrate": number, "totalFiber": number, "totalProtein": number, "totalSugars": "string", "addedSugar": "string", "sugarTypes": [{ "type": "string", "amount": "string" }], "vitamins": [{ "type": "string", "amount": "string" }]}
+
+Extract product name data from: ${JSON.stringify(extractedText)}. If data is unclear, use a real-time web search to confirm standard nutritional facts for the product. Return only valid JSON without any additional text.`;
     
-    Extract nutrition data from: ${JSON.stringify(extractedText)}. If data is unclear, use a real-time web search to confirm standard nutritional facts for the product. Return only valid JSON without any additional text.`;
-    
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      tools: [{ googleSearch: {} } as any]
+    });
     const response = await result.response;
     const content = response.text() || "";
     
@@ -211,10 +252,34 @@ export async function analyzeNutrition(extractedText: any): Promise<any> {
         try {
           return JSON.parse(jsonMatch[0]);
         } catch (e2) {
-          return { calories: 0, totalSugars: "0g", sugarTypes: [] };
+          return { 
+            calories: 0, 
+            totalFat: 0,
+            saturatedFat: 0,
+            sodium: 0,
+            totalCarbohydrate: 0,
+            totalFiber: 0,
+            totalProtein: 0,
+            totalSugars: "0g", 
+            addedSugar: "0g",
+            sugarTypes: [],
+            vitamins: []
+          };
         }
       }
-      return { calories: 0, totalSugars: "0g", sugarTypes: [] };
+      return { 
+        calories: 0, 
+        totalFat: 0,
+        saturatedFat: 0,
+        sodium: 0,
+        totalCarbohydrate: 0,
+        totalFiber: 0,
+        totalProtein: 0,
+        totalSugars: "0g", 
+        addedSugar: "0g",
+        sugarTypes: [],
+        vitamins: []
+      };
     }
   } catch (error) {
     console.error("Error analyzing nutrition:", error);
@@ -222,23 +287,39 @@ export async function analyzeNutrition(extractedText: any): Promise<any> {
       // Return a fallback response when rate limited
       return {
         calories: 0,
+        totalFat: 0,
+        saturatedFat: 0,
+        sodium: 0,
+        totalCarbohydrate: 0,
+        totalFiber: 0,
+        totalProtein: 0,
         totalSugars: "N/A - Rate limit reached",
+        addedSugar: "N/A - Rate limit reached",
         sugarTypes: [
           {
             type: "Rate Limit Notice",
             amount: "Google free tier limit reached. Please add credits to continue analysis."
           }
-        ]
+        ],
+        vitamins: []
       };
     }
     
     // Fall back to the original model if web search model fails
     try {
+      // Initialize Google Generative AI client inside the function to ensure env vars are loaded
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        console.error("GEMINI_API_KEY is missing for fallback nutrition analysis.");
+        throw new Error("GEMINI_API_KEY is not configured.");
+      }
+      const genAI = new GoogleGenerativeAI(apiKey);
+      
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
       
-      const prompt = `From the provided nutritional information, extract the total calories and sugar content with types of sugars from the extracted information. Provide only the numbers and their units. Do not include any other text or commentary. Respond with valid JSON only in this exact format: { "calories": number, "totalSugars": "string", "sugarTypes": [{ "type": "string", "amount": "string" }] }
-      
-      Extract nutrition data from: ${JSON.stringify(extractedText)}. Return only valid JSON without any additional text.`;
+      const prompt = `From the Product name, extract the total calories and sugar content with types of sugars and Extract ALL essential nutritional values (Calories, Total Fat, Saturated Fat, Sodium, Total Carbohydrate, Dietary Fiber, Total Sugar, Added Sugar, and Protein). from the extracted information. Provide only the numbers and their units and names. Do not include any other text or commentary. Respond with valid JSON only in this exact format: { "calories": number, "totalFat": number, "saturatedFat": number, "sodium": number, "totalCarbohydrate": number, "totalFiber": number, "totalProtein": number, "totalSugars": "string", "addedSugar": "string", "sugarTypes": [{ "type": "string", "amount": "string" }], "vitamins": [{ "type": "string", "amount": "string" }]}
+
+Extract product name data from: ${JSON.stringify(extractedText)}. Return only valid JSON without any additional text.`;
       
       const result = await model.generateContent(prompt);
       const response = await result.response;
@@ -252,14 +333,50 @@ export async function analyzeNutrition(extractedText: any): Promise<any> {
           try {
             return JSON.parse(jsonMatch[0]);
           } catch (e2) {
-            return { calories: 0, totalSugars: "0g", sugarTypes: [] };
+            return { 
+              calories: 0, 
+              totalFat: 0,
+              saturatedFat: 0,
+              sodium: 0,
+              totalCarbohydrate: 0,
+              totalFiber: 0,
+              totalProtein: 0,
+              totalSugars: "0g", 
+              addedSugar: "0g",
+              sugarTypes: [],
+              vitamins: []
+            };
           }
         }
-        return { calories: 0, totalSugars: "0g", sugarTypes: [] };
+        return { 
+          calories: 0, 
+          totalFat: 0,
+          saturatedFat: 0,
+          sodium: 0,
+          totalCarbohydrate: 0,
+          totalFiber: 0,
+          totalProtein: 0,
+          totalSugars: "0g", 
+          addedSugar: "0g",
+          sugarTypes: [],
+          vitamins: []
+        };
       }
     } catch (fallbackError) {
       console.error("Error in fallback nutrition analysis:", fallbackError);
-      return { calories: 0, totalSugars: "0g", sugarTypes: [] };
+      return { 
+        calories: 0, 
+        totalFat: 0,
+        saturatedFat: 0,
+        sodium: 0,
+        totalCarbohydrate: 0,
+        totalFiber: 0,
+        totalProtein: 0,
+        totalSugars: "0g", 
+        addedSugar: "0g",
+        sugarTypes: [],
+        vitamins: []
+      };
     }
   }
 }
@@ -291,6 +408,14 @@ export async function generateChatResponse(question: string, productData: any): 
   }
 
   try {
+    // Initialize Google Generative AI client inside the function to ensure env vars are loaded
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("GEMINI_API_KEY is missing for chat response.");
+      throw new Error("GEMINI_API_KEY is not configured.");
+    }
+    const genAI = new GoogleGenerativeAI(apiKey);
+    
     // Use web search model for real-time grounding
     const model = genAI.getGenerativeModel({ model: ANALYSIS_MODEL });
     
@@ -302,7 +427,10 @@ export async function generateChatResponse(question: string, productData: any): 
     
     Answer the user's question using the provided product data first. If the answer requires current external context (e.g., price, news), use a real-time web search to find the most up-to-date information before answering.`;
     
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      tools: [{ googleSearch: {} } as any]
+    });
     const response = await result.response;
     
     return response.text() || "I'm sorry, I couldn't generate a response to that question.";
@@ -314,6 +442,14 @@ export async function generateChatResponse(question: string, productData: any): 
     
     // Fall back to the original model if web search model fails
     try {
+      // Initialize Google Generative AI client inside the function to ensure env vars are loaded
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        console.error("GEMINI_API_KEY is missing for fallback chat response.");
+        throw new Error("GEMINI_API_KEY is not configured.");
+      }
+      const genAI = new GoogleGenerativeAI(apiKey);
+      
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
       
       const prompt = `This prompt is for the chatbot. Answer the user's question using only the provided product data and be honest if the information is not present. Be helpful and concise.

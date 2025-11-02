@@ -20,10 +20,23 @@ export interface SugarType {
   amount: string;
 }
 
+export interface VitaminType {
+  type: string;
+  amount: string;
+}
+
 export interface NutritionData {
   calories: number;
   totalSugars: string;
   sugarTypes: SugarType[];
+  totalFat: number;
+  saturatedFat: number;
+  sodium: number;
+  totalCarbohydrate: number;
+  totalFiber: number;
+  totalProtein: number;
+  addedSugar: string;
+  vitamins: VitaminType[];
 }
 
 export interface RedditData {
