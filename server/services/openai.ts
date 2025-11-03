@@ -16,14 +16,16 @@ const DEMO_MODE = false;
 const VISION_MODEL = "gemini-2.5-flash";
 const ANALYSIS_MODEL = "gemini-2.5-flash";
 
-export async function identifyProductAndExtractText(base64Image: string): Promise<{
+export async function identifyProductAndExtractText(base64Image: string): Promise<Array<{
   productName: string;
   extractedText: any;
   summary: string;
-}> {
+}>> {
   // Check for the preferred HuggingFace flag first
   if (USE_HUGGINGFACE) {
-    return analyzeImageWithVision(base64Image);
+    const result = await analyzeImageWithVision(base64Image);
+    // Return as array for consistency
+    return [result];
   }
 
   // --- Start Gemini Logic ---
@@ -40,7 +42,7 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
   if (DEMO_MODE) {
     // Return demo data for testing purposes
     await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
-    return {
+    return [{
       productName: "Nature Valley Granola Bar",
       extractedText: {
         ingredients: "Whole Grain Oats, Sugar, Canola Oil, Rice Flour, Honey, Brown Sugar Syrup, Salt, Natural Flavor, Vitamin E (Mixed Tocopherols) Added to Retain Freshness",
@@ -49,13 +51,14 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
         brand: "Nature Valley"
       },
       summary: "Nature Valley Granola Bar is a wholesome snack made with whole grain oats and natural ingredients. Each serving contains 190 calories and provides sustained energy. Perfect for on-the-go snacking, hiking, or as a quick breakfast option. Contains 4g of protein and 2g of fiber per serving. Best enjoyed as part of an active lifestyle."
-    };
+    }];
   }
 
   try {
     const model = genAI.getGenerativeModel({ model: VISION_MODEL });
     
-    const prompt = "You are a product identification expert. Analyze this image to identify the product and extract all visible text including ingredients and nutrition facts. For the summary, act as a product analyst and summarize the key features based on the provided text. Focus on what it is for and how to use it. Do not include any extra commentary, keep your response short and to the point but do not miss the main details, within 5 lines. Respond with valid JSON only in this exact format: { \"productName\": \"string\", \"extractedText\": {\"ingredients\": \"string\", \"nutrition\": \"string\", \"brand\": \"string\"}, \"summary\": \"string\" }";
+    // Updated prompt to detect multiple products and return them as an array
+    const prompt = "You are a product identification expert. Analyze this image to identify all products visible and extract all visible text including ingredients and nutrition facts for each product. For each product, provide a summary that acts as a product analyst summary of key features based on the provided text. Focus on what it is for and how to use it. Do not include any extra commentary, keep your response short and to the point but do not miss the main details, within 5 lines. Respond with valid JSON only as an array of objects in this exact format: [{ \"productName\": \"string\", \"extractedText\": {\"ingredients\": \"string\", \"nutrition\": \"string\", \"brand\": \"string\"}, \"summary\": \"string\" }]";
 
     const image = {
       inlineData: {
@@ -71,36 +74,62 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
     let resultData;
     
     try {
-      // Try to parse the entire response as JSON
+      // Try to parse the entire response as JSON array
       resultData = JSON.parse(content);
     } catch (e) {
-      // If that fails, try to extract JSON from the response
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      // If that fails, try to extract JSON array from the response
+      const jsonMatch = content.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         try {
           resultData = JSON.parse(jsonMatch[0]);
         } catch (e2) {
-          // Fallback to parsing the content manually
-          resultData = {
+          // Fallback to single object wrapped in array
+          const singleObjectMatch = content.match(/\{[\s\S]*\}/);
+          if (singleObjectMatch) {
+            try {
+              const singleObject = JSON.parse(singleObjectMatch[0]);
+              resultData = [singleObject];
+            } catch (e3) {
+              resultData = [{
+                productName: "Unknown Product",
+                extractedText: {},
+                summary: content || "Unable to analyze product"
+              }];
+            }
+          } else {
+            resultData = [{
+              productName: "Unknown Product",
+              extractedText: {},
+              summary: content || "Unable to analyze product"
+            }];
+          }
+        }
+      } else {
+        // Try to parse as single object and wrap in array
+        try {
+          const singleObject = JSON.parse(content);
+          resultData = [singleObject];
+        } catch (e4) {
+          resultData = [{
             productName: "Unknown Product",
             extractedText: {},
             summary: content || "Unable to analyze product"
-          };
+          }];
         }
-      } else {
-        resultData = {
-          productName: "Unknown Product", 
-          extractedText: {},
-          summary: content || "Unable to analyze product"
-        };
       }
     }
     
-    return {
-      productName: resultData.productName || "Unknown Product",
-      extractedText: resultData.extractedText || {},
-      summary: resultData.summary || "Unable to analyze product"
-    };
+    // Ensure we always return an array
+    if (!Array.isArray(resultData)) {
+      resultData = [resultData];
+    }
+    
+    // Map the results to ensure consistent structure
+    return resultData.map(item => ({
+      productName: item.productName || "Unknown Product",
+      extractedText: item.extractedText || {},
+      summary: item.summary || "Unable to analyze product"
+    }));
   } catch (error) {
     // --- CRITICAL FIX: Enhanced Logging ---
     console.error("FATAL ERROR: Image Analysis (Vision API) failed immediately after upload.", error);
