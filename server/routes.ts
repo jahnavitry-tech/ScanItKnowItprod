@@ -23,26 +23,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const base64Image = req.file.buffer.toString('base64');
       
-      // Initial AI processing
-      const analysisResult = await identifyProductAndExtractText(base64Image);
+      // Initial AI processing - now returns an array of products
+      const analysisResults = await identifyProductAndExtractText(base64Image);
       
-      // Create product analysis record
-      const productAnalysis = await storage.createProductAnalysis({
-        productName: analysisResult.productName,
-        productSummary: analysisResult.summary,
-        extractedText: analysisResult.extractedText,
-        imageUrl: null, // Could implement image storage later
-        ingredientsData: null,
-        nutritionData: null,
-        redditData: null,
-      });
+      // For backward compatibility, if only one product is detected, return the single product format
+      // For multiple products, return the array format
+      if (analysisResults.length === 1) {
+        // Create product analysis record for the first (and only) product
+        const productAnalysis = await storage.createProductAnalysis({
+          productName: analysisResults[0].productName,
+          productSummary: analysisResults[0].summary,
+          extractedText: analysisResults[0].extractedText,
+          imageUrl: null, // Could implement image storage later
+          ingredientsData: null,
+          nutritionData: null,
+          redditData: null,
+        });
 
-      res.json({
-        analysisId: productAnalysis.id,
-        productName: productAnalysis.productName,
-        summary: productAnalysis.productSummary,
-        extractedText: productAnalysis.extractedText
-      });
+        res.json({
+          analysisId: productAnalysis.id,
+          productName: productAnalysis.productName,
+          summary: productAnalysis.productSummary,
+          extractedText: productAnalysis.extractedText
+        });
+      } else {
+        // Return array of detected products for multi-product selection
+        res.json(analysisResults);
+      }
 
     } catch (error) {
       console.error("Error analyzing product:", error);
