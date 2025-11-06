@@ -78,7 +78,7 @@ export interface RedditData {
 export interface ChatMessage {
   message: string;
   response: string;
-  timestamp: Date;
+  timestamp?: Date; // Made optional since backend sends createdAt
 }
 
 export type CardType = 'ingredients' | 'calories' | 'reddit' | 'qa';
