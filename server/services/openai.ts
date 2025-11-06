@@ -2,7 +2,6 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { 
   analyzeImageWithVision, 
   analyzeIngredientsHF, 
-  analyzeNutritionHF, 
   generateChatResponseHF 
 } from "./huggingface";
 
@@ -57,8 +56,27 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
   try {
     const model = genAI.getGenerativeModel({ model: VISION_MODEL });
     
-    // Updated prompt to detect multiple products and return them as an array
-    const prompt = "You are a product identification expert. Analyze this image to identify all products visible and extract all visible text including ingredients and nutrition facts for each product. For each product, provide a summary that acts as a product analyst summary of key features based on the provided text. Focus on what it is for and how to use it. Do not include any extra commentary, keep your response short and to the point but do not miss the main details, within 5 lines. Respond with valid JSON only as an array of objects in this exact format: [{ \"productName\": \"string\", \"extractedText\": {\"ingredients\": \"string\", \"nutrition\": \"string\", \"brand\": \"string\"}, \"summary\": \"string\" }]";
+    // THE COMPLETE "AUTONOMOUS REPORT AGENT (ARA)" PROMPT
+    // This prompt forces categorization (A or B) and adheres to the final JSON structure.
+    const prompt = `
+    **ROLE:** Autonomous Report Agent (ARA).
+    **OUTPUT:** ONLY a JSON array. DO NOT include ANY extra text. The array MUST contain a unique JSON object for EACH distinct product (Brandable or Non-Brandable) or main subject identified.
+    **TASK:** Analyze the image. Prioritize **FULL, VERBATIM INGREDIENTS LIST EXTRACTION** and **QR/Barcode data capture**.
+
+    **IF PRODUCT/GOODS (Brandable Item):**
+    1.  **Extract Text:**
+        * **INGREDIENTS:** Capture the **FULL, VERBATIM ingredients list**.
+        * **NUTRITION:** Capture the **main calorie and serving size data** or key nutritional claims.
+        * **BRAND:** Capture the Brand name, Product name, and **ALL QR/Barcode data**.
+    2.  **Summary:** Summarize key features, intended purpose, and typical usage (**MAX 3 lines**).
+
+    **IF SCENE/SUBJECT/FOOD (Non-Brandable, e.g., Full English Breakfast, Plant):**
+    1.  **Extract Text:** Set 'nutrition' and 'brand' fields to **'Not applicable'**.
+    2.  **Ingredients Field:** List ALL clearly identifiable components/ingredients of the food or visual elements of the scene (e.g., 'Fried Eggs, Sausages, Baked Beans, Plate, Marble Countertop').
+    3.  **Summary:** Provide a detailed, descriptive identity and context (**MAX 3 lines**).
+
+    **JSON SCHEMA:**[{"productName": "string", "extractedText": {"ingredients": "string", "nutrition": "string", "brand": "string"}, "summary": "string"}]
+    `;
 
     const image = {
       inlineData: {
@@ -67,96 +85,64 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
       },
     };
     
+    console.log("Sending image to Gemini for analysis...");
     const result = await model.generateContent([prompt, image]);
     const response = await result.response;
     const content = response.text() || "";
+    console.log("Received response from Gemini:", content.substring(0, 200) + "...");
     
     let resultData;
     
     try {
-      // Try to parse the entire response as JSON array
-      resultData = JSON.parse(content);
-    } catch (e) {
-      // If that fails, try to extract JSON array from the response
+      // Robustly extract and parse the JSON array
       const jsonMatch = content.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
-        try {
           resultData = JSON.parse(jsonMatch[0]);
-        } catch (e2) {
-          // Fallback to single object wrapped in array
-          const singleObjectMatch = content.match(/\{[\s\S]*\}/);
-          if (singleObjectMatch) {
-            try {
-              const singleObject = JSON.parse(singleObjectMatch[0]);
-              resultData = [singleObject];
-            } catch (e3) {
-              resultData = [{
-                productName: "Unknown Product",
-                extractedText: {},
-                summary: content || "Unable to analyze product"
-              }];
-            }
-          } else {
-            resultData = [{
-              productName: "Unknown Product",
-              extractedText: {},
-              summary: content || "Unable to analyze product"
-            }];
-          }
-        }
-      } else {
-        // Try to parse as single object and wrap in array
-        try {
-          const singleObject = JSON.parse(content);
-          resultData = [singleObject];
-        } catch (e4) {
-          resultData = [{
-            productName: "Unknown Product",
-            extractedText: {},
-            summary: content || "Unable to analyze product"
-          }];
-        }
       }
+    } catch (e) {
+      console.error("Failed to parse AI response as JSON:", e);
+      console.error("Full response content:", content);
+      // Return an array with a fallback object if parsing fails
+      return [{
+        productName: "Analysis Error",
+        extractedText: { ingredients: "N/A", nutrition: "N/A", brand: "System" },
+        summary: "Failed to parse the AI response. Please try again with a clearer image."
+      }]; 
     }
     
     // Ensure we always return an array
     if (!Array.isArray(resultData)) {
-      resultData = [resultData];
+        console.error("AI response is not an array:", resultData);
+        return [];
     }
-    
-    // Map the results to ensure consistent structure
-    return resultData.map(item => ({
-      productName: item.productName || "Unknown Product",
-      extractedText: item.extractedText || {},
-      summary: item.summary || "Unable to analyze product"
-    }));
+
+    console.log("Successfully parsed AI response with", resultData.length, "products");
+    return resultData;
   } catch (error) {
-    // --- CRITICAL FIX: Enhanced Logging ---
-    console.error("FATAL ERROR: Image Analysis (Vision API) failed immediately after upload.", error);
-    if (error instanceof Error) {
-        console.error("Error Message:", error.message);
-        console.error("Error Name:", error.name);
-    } else {
-        console.error("Non-Error Object Thrown:", error);
-    }
-    throw new Error("Failed to identify product and extract text");
+    console.error("Error identifying product with ARA:", error);
+    // Return a structured error response on API failure
+    return [{
+      productName: "API Error",
+      extractedText: { ingredients: "N/A", nutrition: "N/A", brand: "System" },
+      summary: "The image analysis API failed to process the request."
+    }];
   }
 }
 
-export async function analyzeIngredients(extractedText: any): Promise<any> {
+export async function analyzeIngredients(productName: string, brand: string, summary: string, extractedText: any): Promise<any> {
   if (DEMO_MODE) {
     await new Promise(resolve => setTimeout(resolve, 800));
     return {
-      ingredients: [
-        { name: "Whole Grain Oats", safety: "Safe", reason: "Natural whole grain" },
-        { name: "Sugar", safety: "Moderate", reason: "High sugar content" },
-        { name: "Canola Oil", safety: "Safe", reason: "Heart healthy oil" },
-        { name: "Rice Flour", safety: "Safe", reason: "Gluten-free grain" },
-        { name: "Honey", safety: "Safe", reason: "Natural sweetener" },
-        { name: "Brown Sugar Syrup", safety: "Moderate", reason: "Added sugar source" },
-        { name: "Salt", safety: "Safe", reason: "Natural preservative" },
-        { name: "Natural Flavor", safety: "Safe", reason: "FDA approved flavoring" },
-        { name: "Vitamin E", safety: "Safe", reason: "Essential nutrient antioxidant" }
+      ingredients_analysis: [
+        { name: "Whole Grain Oats", safety_status: "Safe", reason_with_source: "Natural whole grain" },
+        { name: "Sugar", safety_status: "Moderate", reason_with_source: "High sugar content" },
+        { name: "Canola Oil", safety_status: "Safe", reason_with_source: "Heart healthy oil" },
+        { name: "Rice Flour", safety_status: "Safe", reason_with_source: "Gluten-free grain" },
+        { name: "Honey", safety_status: "Safe", reason_with_source: "Natural sweetener" },
+        { name: "Brown Sugar Syrup", safety_status: "Moderate", reason_with_source: "Added sugar source" },
+        { name: "Salt", safety_status: "Safe", reason_with_source: "Natural preservative" },
+        { name: "Natural Flavor", safety_status: "Safe", reason_with_source: "FDA approved flavoring" },
+        { name: "Vitamin E", safety_status: "Safe", reason_with_source: "Essential nutrient antioxidant" }
       ]
     };
   }
@@ -173,14 +159,132 @@ export async function analyzeIngredients(extractedText: any): Promise<any> {
     
     const model = genAI.getGenerativeModel({ model: ANALYSIS_MODEL });
     
-    const prompt = `You are a food safety scientist. Use a real-time web search to ground your analysis on current safety warnings and health standards. For each ingredient, provide a specific, concise safety rating and a 3-4 word reason. Respond with valid JSON only in this exact format: { "ingredients": [{ "name": "string", "safety": "Safe|Moderate|Harmful", "reason": "string" }] }
-    
-    Analyze the ingredients from this product data: ${JSON.stringify(extractedText)}. Use a real-time web search to ground your analysis on current safety warnings and health standards. Return only valid JSON without any additional text.`;
+    const prompt = `**ROLE:** You are the **Ultimate Ingredient Safety Analyst (UISA)**. Your sole function is to take the extracted product data, execute a comprehensive real-time web search for authoritative safety data, and generate a hyper-concise report.
+
+**MANDATORY ACTION & DATA GROUNDING:**
+1.  **Search:** For *every* ingredient listed in the \`ingredients\` field of the input, execute a necessary real-time web search to find current safety warnings, health standards, or common regulatory status (e.g., FDA, WHO, CDC, EWG).
+2.  **Analysis:** Assign a definitive safety rating and a concise reason for each ingredient based *only* on the search results.
+
+**PRODUCT INFORMATION:**
+Product Name: ${productName}
+Brand: ${brand}
+Summary: ${summary}
+
+**ANALYSIS & REASONING RULES (STRICT):**
+* **Safety Rating:** Use only one of the following status labels: **Safe**, **Moderate**, or **Harmful**.
+* **Reason (Specific & Source):**
+    * If **Moderate** or **Harmful**: Provide a concise, 3-4 word specific reason for the health risk and cite the source and year in parentheses (e.g., \`\(WHO, 2024\)\`).
+    * If **Safe**: State 'Safe' or 'Safe (unless allergic)'.
+
+**OUTPUT FORMAT (STRICT & FINAL):**
+Respond with valid JSON only in this exact format, where \`safety_status\` uses the labels specified above and \`reason_with_source\` includes the 3-4 word reason and citation. Analyze the ingredients from this product data: ${JSON.stringify(extractedText)}. Return only valid JSON without any additional text.
+
+**JSON**
+{
+  "ingredients_analysis": [
+    {
+      "name": "string",
+      "safety_status": "Safe|Moderate|Harmful",
+      "reason_with_source": "string"
+    }
+  ]
+}
+
+**FINAL RESPONSE RULE (MANDATORY):** Provide **ONLY** the structured data generated by the OUTPUT FORMAT (STRICT & FINAL). No other text, preamble, postscript, or conversational elements are permitted.`;
     
     // Explicitly enable Google Search for grounding
     const result = await model.generateContent({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         tools: [{ googleSearch: {} } as any]
+    });
+
+    const response = await result.response;
+    const content = response.text() || "";
+    
+    try {
+      const parsed = JSON.parse(content);
+      return parsed;
+    } catch (e) {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return parsed;
+        } catch (e2) {
+          return { ingredients_analysis: [] };
+        }
+      }
+      return { ingredients_analysis: [] };
+    }
+  } catch (error) {
+    console.error("Error with web search for ingredients:", error);
+    
+    // Fall back to HuggingFace if web search fails and USE_HUGGINGFACE is true
+    if (USE_HUGGINGFACE) {
+      try {
+        const hfResult = await analyzeIngredientsHF(extractedText);
+        return hfResult;
+      } catch (hfError) {
+        console.error("Error with HuggingFace ingredients:", hfError);
+      }
+    }
+    
+    // If both fail, return a fallback response
+    if (error instanceof Error && error.message.includes("Rate limit exceeded")) {
+      return {
+        ingredients_analysis: [
+          {
+            name: "Rate Limit Reached",
+            safety_status: "Safe",
+            reason_with_source: "Google free tier limit reached. Please add credits to continue analysis or try again later."
+          }
+        ]
+      };
+    }
+    throw new Error("Failed to analyze ingredients");
+  }
+}
+
+// --- 3. Product Features Analysis (UPSA) ---
+export async function analyzeFeatures(productName: string, extractedText: any, summary: string) {
+  // Skipping HuggingFace for this custom analysis
+  
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
+  const genAI = new GoogleGenerativeAI(apiKey);
+
+  if (DEMO_MODE) {
+    return {
+      productCategory: "Breakfast Cereal",
+      mainPurpose: "Quick, high-fiber, and vitamin-fortified breakfast.",
+      usageInstructions: "Serve with milk or yogurt. Enjoy hot or cold.",
+      extraDetails: "Health-conscious adults and active families."
+    };
+  }
+  
+  const prompt = `You are a product marketing expert. Based on the product name "${productName}", brand "${extractedText.brand}", and summary "${summary}", generate structured key facts about the product. Your output MUST be a valid JSON object with the following structure: { "productCategory": "string", "mainPurpose": "string", "usageInstructions": "string", "extraDetails": "string" }. Do not add any extra text or markdown fences.
+  
+  Product Information:
+  Product Name: ${productName}
+  Brand: ${extractedText.brand}
+  Summary: ${summary}
+  Ingredients: ${extractedText.ingredients}
+  Nutrition/Composition: ${extractedText.nutrition}
+
+  Required Output Format:
+  {
+    "productCategory": "[General category based on text, e.g., 'Snack Bar', 'Beverage']",
+    "mainPurpose": "[Primary use/purpose of the product]",
+    "usageInstructions": "[How to use/consume the product]",
+    "extraDetails": "[Additional relevant information about the product]"
+  }`;
+
+  try {
+    const model = genAI.getGenerativeModel({ model: ANALYSIS_MODEL });
+    
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      tools: [{ googleSearch: {} } as any]
     });
 
     const response = await result.response;
@@ -194,58 +298,52 @@ export async function analyzeIngredients(extractedText: any): Promise<any> {
         try {
           return JSON.parse(jsonMatch[0]);
         } catch (e2) {
-          return { ingredients: [] };
+          return {
+            productCategory: "",
+            mainPurpose: "",
+            usageInstructions: "",
+            extraDetails: ""
+          };
         }
       }
-      return { ingredients: [] };
-    }
-  } catch (error) {
-    console.error("Error with web search for ingredients:", error);
-    
-    // Fall back to HuggingFace if web search fails and USE_HUGGINGFACE is true
-    if (USE_HUGGINGFACE) {
-      try {
-        return await analyzeIngredientsHF(extractedText);
-      } catch (hfError) {
-        console.error("Error with HuggingFace ingredients:", hfError);
-      }
-    }
-    
-    // If both fail, return a fallback response
-    if (error instanceof Error && error.message.includes("Rate limit exceeded")) {
       return {
-        ingredients: [
-          {
-            name: "Rate Limit Reached",
-            safety: "Safe",
-            reason: "Google free tier limit reached. Please add credits to continue analysis or try again later."
-          }
-        ]
+        productCategory: "",
+        mainPurpose: "",
+        usageInstructions: "",
+        extraDetails: ""
       };
     }
-    throw new Error("Failed to analyze ingredients");
+    
+  } catch (error) {
+    console.error("Error in feature analysis:", error);
+    return {
+      productCategory: "",
+      mainPurpose: "",
+      usageInstructions: "",
+      extraDetails: ""
+    }; // Return empty data on error
   }
 }
 
-export async function analyzeNutrition(extractedText: any): Promise<any> {
+// --- 4. Product Compositional Analysis (UPCA) ---
+export async function analyzeComposition(productName: string, brand: string, summary: string, extractedText: any): Promise<any> {
   if (DEMO_MODE) {
     await new Promise(resolve => setTimeout(resolve, 700));
     return {
+      productCategory: "Snack Bar",
+      netQuantity: 42,
+      unitType: "g",
       calories: 190,
       totalFat: 6,
-      saturatedFat: 1,
-      sodium: 160,
-      totalCarbohydrate: 32,
-      totalFiber: 2,
       totalProtein: 4,
-      totalSugars: "11g",
-      addedSugar: "10g",
-      sugarTypes: [
-        { type: "Added Sugars", amount: "10g" },
-        { type: "Natural Sugars", amount: "1g" }
-      ],
-      vitamins: [
-        { type: "Vitamin E", amount: "5mg" }
+      compositionalDetails: [
+        { key: "Total Carbohydrate", value: "32g" },
+        { key: "Dietary Fiber", value: "2g" },
+        { key: "Total Sugars", value: "11g" },
+        { key: "Added Sugars", value: "10g" },
+        { key: "Sodium", value: "160mg" },
+        { key: "Saturated Fat", value: "1g" },
+        { key: "Vitamin E", value: "5mg" }
       ]
     };
   }
@@ -254,7 +352,7 @@ export async function analyzeNutrition(extractedText: any): Promise<any> {
     // Initialize Google Generative AI client inside the function to ensure env vars are loaded
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.error("GEMINI_API_KEY is missing for nutrition analysis.");
+      console.error("GEMINI_API_KEY is missing for composition analysis.");
       throw new Error("GEMINI_API_KEY is not configured.");
     }
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -262,9 +360,41 @@ export async function analyzeNutrition(extractedText: any): Promise<any> {
     // Use web search model for real-time grounding
     const model = genAI.getGenerativeModel({ model: ANALYSIS_MODEL });
     
-    const prompt = `From the Product name, extract the total calories and sugar content with types of sugars and Extract ALL essential nutritional values (Calories, Total Fat, Saturated Fat, Sodium, Total Carbohydrate, Dietary Fiber, Total Sugar, Added Sugar, and Protein). from the extracted information. Provide only the numbers and their units and names. Do not include any other text or commentary. Respond with valid JSON only in this exact format: { "calories": number, "totalFat": number, "saturatedFat": number, "sodium": number, "totalCarbohydrate": number, "totalFiber": number, "totalProtein": number, "totalSugars": "string", "addedSugar": "string", "sugarTypes": [{ "type": "string", "amount": "string" }], "vitamins": [{ "type": "string", "amount": "string" }]}
+    const prompt = `**ROLE:** You are the **Universal Product Composition Analyst (UPCA)**. Your sole function is to take structured product data and generate a JSON report detailing its essential quantitative and regulatory composition, adapted strictly to the product category.
 
-Extract product name data from: ${JSON.stringify(extractedText)}. If data is unclear, use a real-time web search to confirm standard nutritional facts for the product. Return only valid JSON without any additional text.`;
+**MANDATORY ACTION:**
+1.  **Categorize:** Determine if the product is **Food/Consumable** or **Non-Food/Topical/Object**.
+2.  **Search:** Use a real-time web search to confirm standard compositional facts, safety, and regulatory details for the specific product.
+
+**PRODUCT INFORMATION:**
+Product Name: ${productName}
+Brand: ${brand}
+Summary: ${summary}
+
+**COMPOSITION FIELDS (ADAPTIVE LOGIC):**
+* **IF Food/Consumable:** Extract standard nutritional values (Calories, Fat, Protein) and detail all other essential nutrition fields within the \`compositionalDetails\` array.
+* **IF Non-Food/Topical/Object:** Set food-specific numerical fields (calories, totalFat, totalProtein) to **0** and detail all relevant chemical/material composition details (e.g., Active Material, Certifications, Warnings) within the \`compositionalDetails\` array.
+
+**OUTPUT FORMAT (STRICT & FINAL):**
+Respond with **valid JSON only**. The JSON must strictly adhere to the following schema. If a value is unknown or non-applicable, use **"N/A"** (except for numerical fields for non-food, which must be 0). Analyze the product data from: ${JSON.stringify(extractedText)}.
+
+**JSON**
+{
+  "productCategory": "string",
+  "netQuantity": "number", // Should be the numerical value of the size (e.g., 5 for 5 mL, 12 for 12 fl oz)
+  "unitType": "string", // Should be the unit (e.g., "mL", "fl oz", "g")
+  "calories": "number",
+  "totalFat": "number",
+  "totalProtein": "number",
+  "compositionalDetails": [
+    {
+      "key": "string",
+      "value": "string"
+    }
+  ]
+}
+
+**FINAL RESPONSE RULE (MANDATORY):** Provide **ONLY** the structured data generated by the OUTPUT FORMAT (STRICT & FINAL). No other text, preamble, postscript, or conversational elements are permitted.`;
     
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -282,55 +412,43 @@ Extract product name data from: ${JSON.stringify(extractedText)}. If data is unc
           return JSON.parse(jsonMatch[0]);
         } catch (e2) {
           return { 
-            calories: 0, 
+            productCategory: "",
+            netQuantity: 0,
+            unitType: "",
+            calories: 0,
             totalFat: 0,
-            saturatedFat: 0,
-            sodium: 0,
-            totalCarbohydrate: 0,
-            totalFiber: 0,
             totalProtein: 0,
-            totalSugars: "0g", 
-            addedSugar: "0g",
-            sugarTypes: [],
-            vitamins: []
+            compositionalDetails: []
           };
         }
       }
       return { 
-        calories: 0, 
+        productCategory: "",
+        netQuantity: 0,
+        unitType: "",
+        calories: 0,
         totalFat: 0,
-        saturatedFat: 0,
-        sodium: 0,
-        totalCarbohydrate: 0,
-        totalFiber: 0,
         totalProtein: 0,
-        totalSugars: "0g", 
-        addedSugar: "0g",
-        sugarTypes: [],
-        vitamins: []
+        compositionalDetails: []
       };
     }
   } catch (error) {
-    console.error("Error analyzing nutrition:", error);
+    console.error("Error analyzing composition:", error);
     if (error instanceof Error && error.message.includes("Rate limit exceeded")) {
       // Return a fallback response when rate limited
       return {
+        productCategory: "Rate Limit",
+        netQuantity: 0,
+        unitType: "",
         calories: 0,
         totalFat: 0,
-        saturatedFat: 0,
-        sodium: 0,
-        totalCarbohydrate: 0,
-        totalFiber: 0,
         totalProtein: 0,
-        totalSugars: "N/A - Rate limit reached",
-        addedSugar: "N/A - Rate limit reached",
-        sugarTypes: [
+        compositionalDetails: [
           {
-            type: "Rate Limit Notice",
-            amount: "Google free tier limit reached. Please add credits to continue analysis."
+            key: "Rate Limit Notice",
+            value: "Google free tier limit reached. Please add credits to continue analysis."
           }
-        ],
-        vitamins: []
+        ]
       };
     }
     
@@ -339,16 +457,48 @@ Extract product name data from: ${JSON.stringify(extractedText)}. If data is unc
       // Initialize Google Generative AI client inside the function to ensure env vars are loaded
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        console.error("GEMINI_API_KEY is missing for fallback nutrition analysis.");
+        console.error("GEMINI_API_KEY is missing for fallback composition analysis.");
         throw new Error("GEMINI_API_KEY is not configured.");
       }
       const genAI = new GoogleGenerativeAI(apiKey);
       
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
       
-      const prompt = `From the Product name, extract the total calories and sugar content with types of sugars and Extract ALL essential nutritional values (Calories, Total Fat, Saturated Fat, Sodium, Total Carbohydrate, Dietary Fiber, Total Sugar, Added Sugar, and Protein). from the extracted information. Provide only the numbers and their units and names. Do not include any other text or commentary. Respond with valid JSON only in this exact format: { "calories": number, "totalFat": number, "saturatedFat": number, "sodium": number, "totalCarbohydrate": number, "totalFiber": number, "totalProtein": number, "totalSugars": "string", "addedSugar": "string", "sugarTypes": [{ "type": "string", "amount": "string" }], "vitamins": [{ "type": "string", "amount": "string" }]}
+      const prompt = `**ROLE:** You are the **Universal Product Composition Analyst (UPCA)**. Your sole function is to take structured product data and generate a JSON report detailing its essential quantitative and regulatory composition, adapted strictly to the product category.
 
-Extract product name data from: ${JSON.stringify(extractedText)}. Return only valid JSON without any additional text.`;
+**MANDATORY ACTION:**
+1.  **Categorize:** Determine if the product is **Food/Consumable** or **Non-Food/Topical/Object**.
+2.  **Search:** Use a real-time web search to confirm standard compositional facts, safety, and regulatory details for the specific product.
+
+**PRODUCT INFORMATION:**
+Product Name: ${productName}
+Brand: ${brand}
+Summary: ${summary}
+
+**COMPOSITION FIELDS (ADAPTIVE LOGIC):**
+* **IF Food/Consumable:** Extract standard nutritional values (Calories, Fat, Protein) and detail all other essential nutrition fields within the \`compositionalDetails\` array.
+* **IF Non-Food/Topical/Object:** Set food-specific numerical fields (calories, totalFat, totalProtein) to **0** and detail all relevant chemical/material composition details (e.g., Active Material, Certifications, Warnings) within the \`compositionalDetails\` array.
+
+**OUTPUT FORMAT (STRICT & FINAL):**
+Respond with **valid JSON only**. The JSON must strictly adhere to the following schema. If a value is unknown or non-applicable, use **"N/A"** (except for numerical fields for non-food, which must be 0). Analyze the product data from: ${JSON.stringify(extractedText)}.
+
+**JSON**
+{
+  "productCategory": "string",
+  "netQuantity": "number", // Should be the numerical value of the size (e.g., 5 for 5 mL, 12 for 12 fl oz)
+  "unitType": "string", // Should be the unit (e.g., "mL", "fl oz", "g")
+  "calories": "number",
+  "totalFat": "number",
+  "totalProtein": "number",
+  "compositionalDetails": [
+    {
+      "key": "string",
+      "value": "string"
+    }
+  ]
+}
+
+**FINAL RESPONSE RULE (MANDATORY):** Provide **ONLY** the structured data generated by the OUTPUT FORMAT (STRICT & FINAL). No other text, preamble, postscript, or conversational elements are permitted.`;
       
       const result = await model.generateContent(prompt);
       const response = await result.response;
@@ -363,54 +513,53 @@ Extract product name data from: ${JSON.stringify(extractedText)}. Return only va
             return JSON.parse(jsonMatch[0]);
           } catch (e2) {
             return { 
-              calories: 0, 
+              productCategory: "",
+              netQuantity: 0,
+              unitType: "",
+              calories: 0,
               totalFat: 0,
-              saturatedFat: 0,
-              sodium: 0,
-              totalCarbohydrate: 0,
-              totalFiber: 0,
               totalProtein: 0,
-              totalSugars: "0g", 
-              addedSugar: "0g",
-              sugarTypes: [],
-              vitamins: []
+              compositionalDetails: []
             };
           }
         }
         return { 
-          calories: 0, 
+          productCategory: "",
+          netQuantity: 0,
+          unitType: "",
+          calories: 0,
           totalFat: 0,
-          saturatedFat: 0,
-          sodium: 0,
-          totalCarbohydrate: 0,
-          totalFiber: 0,
           totalProtein: 0,
-          totalSugars: "0g", 
-          addedSugar: "0g",
-          sugarTypes: [],
-          vitamins: []
+          compositionalDetails: []
         };
       }
     } catch (fallbackError) {
-      console.error("Error in fallback nutrition analysis:", fallbackError);
+      console.error("Error in fallback composition analysis:", fallbackError);
       return { 
-        calories: 0, 
+        productCategory: "",
+        netQuantity: 0,
+        unitType: "",
+        calories: 0,
         totalFat: 0,
-        saturatedFat: 0,
-        sodium: 0,
-        totalCarbohydrate: 0,
-        totalFiber: 0,
         totalProtein: 0,
-        totalSugars: "0g", 
-        addedSugar: "0g",
-        sugarTypes: [],
-        vitamins: []
+        compositionalDetails: []
       };
     }
   }
 }
 
-export async function generateChatResponse(question: string, productData: any): Promise<string> {
+// Interface for the data passed to the chat function
+interface ChatProductData {
+  productName: string;
+  productSummary: string;
+  extractedText: any;
+  ingredientsData: any;
+  featuresData?: any;    // Made optional
+  compositionData?: any; // Made optional
+  // NOTE: nutritionData has been removed
+}
+
+export async function generateChatResponse(question: string, productData: ChatProductData): Promise<string> {
   if (DEMO_MODE) {
     await new Promise(resolve => setTimeout(resolve, 500));
     
@@ -448,13 +597,19 @@ export async function generateChatResponse(question: string, productData: any): 
     // Use web search model for real-time grounding
     const model = genAI.getGenerativeModel({ model: ANALYSIS_MODEL });
     
-    const prompt = `You are a user-facing chatbot. Answer the user's question using the provided product data first. If the answer requires current external context (e.g., price, news), use a real-time web search to find the most up-to-date information before answering. Be concise and helpful.
+    const prompt = `You are a helpful product assistant. Answer the user's question about the product based on the provided information. Be concise but informative.
     
-    Product data: ${JSON.stringify(productData)}
-    
-    User question: ${question}
-    
-    Answer the user's question using the provided product data first. If the answer requires current external context (e.g., price, news), use a real-time web search to find the most up-to-date information before answering.`;
+Product Information:
+Product Name: ${productData.productName}
+Product Summary: ${productData.productSummary}
+Ingredients: ${productData.extractedText.ingredients}
+Nutrition: ${productData.extractedText.nutrition}
+Question: ${question}
+
+Output Format:
+{
+  "response": "string"
+}`;
     
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -481,13 +636,19 @@ export async function generateChatResponse(question: string, productData: any): 
       
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
       
-      const prompt = `This prompt is for the chatbot. Answer the user's question using only the provided product data and be honest if the information is not present. Be helpful and concise.
+      const prompt = `You are a helpful product assistant. Answer the user's question about the product based on the provided information. Be concise but informative.
       
-      Product data: ${JSON.stringify(productData)}
-      
-      User question: ${question}
-      
-      Answer based only on the product data provided.`;
+Product Information:
+Product Name: ${productData.productName}
+Product Summary: ${productData.productSummary}
+Ingredients: ${productData.extractedText.ingredients}
+Nutrition: ${productData.extractedText.nutrition}
+Question: ${question}
+
+Output Format:
+{
+  "response": "string"
+}`;
       
       const result = await model.generateContent(prompt);
       const response = await result.response;
