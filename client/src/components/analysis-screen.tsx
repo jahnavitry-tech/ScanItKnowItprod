@@ -241,9 +241,9 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
   return (
     <div className="max-w-md mx-auto px-4 py-6 bg-background space-y-6" data-testid="analysis-screen">
       {/* Product Header */}
-      <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
-        <div className="flex items-center space-x-4 mb-4">
-          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 border border-border flex items-center justify-center">
+      <div className="bg-card rounded-2xl p-6 border border-border shadow-sm space-y-4">
+        <div className="flex items-center space-x-4">
+          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 border border-border flex items-center justify-center mb-4">
             <Camera className="h-8 w-8 text-primary" />
           </div>
           <div className="flex-1">

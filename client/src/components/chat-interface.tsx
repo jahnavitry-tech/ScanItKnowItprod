@@ -16,7 +16,7 @@ export function ChatInterface({ analysisId }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { data: chatHistory = [] } = useQuery({
+  const { data: chatHistory = [] } = useQuery<ChatMessage[]>({
     queryKey: [`/api/chat/${analysisId}`],
     enabled: !!analysisId,
   });
@@ -26,9 +26,14 @@ export function ChatInterface({ analysisId }: ChatInterfaceProps) {
       const response = await apiRequest("POST", `/api/chat/${analysisId}`, { message });
       return response.json();
     },
-    onSuccess: () => {
-      // Invalidate chat history to refetch
-      queryClient.invalidateQueries({ queryKey: [`/api/chat/${analysisId}`] });
+    onSuccess: (newMessage) => {
+      // Add the new message to the query cache manually to avoid refetch delay
+      queryClient.setQueryData([`/api/chat/${analysisId}`], (oldData: ChatMessage[] | undefined) => {
+        if (Array.isArray(oldData)) {
+          return [...oldData, newMessage];
+        }
+        return [newMessage];
+      });
     },
   });
 
@@ -54,9 +59,9 @@ export function ChatInterface({ analysisId }: ChatInterfaceProps) {
     }
   };
 
-  // Combine chat history with new messages
-  const allMessages = Array.isArray(chatHistory) ? [...chatHistory] : [];
-  if (sendMessageMutation.data) {
+  // Combine chat history with the latest sent message if it exists
+  const allMessages: ChatMessage[] = Array.isArray(chatHistory) ? [...chatHistory] : [];
+  if (sendMessageMutation.data && !allMessages.some((msg) => msg.message === sendMessageMutation.data.message)) {
     allMessages.push(sendMessageMutation.data);
   }
 
@@ -103,7 +108,7 @@ export function ChatInterface({ analysisId }: ChatInterfaceProps) {
           </div>
         ))}
 
-        {/* Loading Message */}
+        {/* Loading Message - Show only the pending message */}
         {sendMessageMutation.isPending && (
           <>
             <div className="flex justify-end">
