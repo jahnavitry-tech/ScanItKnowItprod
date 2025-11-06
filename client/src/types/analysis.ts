@@ -1,42 +1,70 @@
+import { ProductAnalysis as ServerProductAnalysis } from "../../../server/storage";
+
+// Export the server type with a more specific name to avoid confusion
+export type { ServerProductAnalysis };
+
+export interface ExtractedTextData {
+  ingredients: string;
+  nutrition: string;
+  brand: string;
+}
+
+/** The initial product analysis created after the first AI call (ARA) */
 export interface ProductAnalysis {
   analysisId: string;
   productName: string;
-  summary: string;
-  extractedText: any;
+  productSummary: string; // The brief summary from ARA - matches backend field name
+  extractedText: ExtractedTextData;
+  imageUrl: string;
+  // Deep Analysis results (null until orchestration runs)
+  featuresData: IFeaturesData | null;
+  ingredientsData: IngredientsData | null;
+  compositionData: ICompositionAnalysis | null;
+  redditData: RedditData | null;
 }
 
+// --- Deep Analysis Types ---
+
+/** Product Features (from UPSA prompt) */
+export interface IFeaturesData {
+  productCategory: string; // Mapped from 'Category'
+  mainPurpose: string; // Mapped from 'Main Purpose'
+  usageInstructions: string; // Mapped from 'Usage'
+  extraDetails: string; // Mapped from 'Extra Details'
+}
+
+/** Ingredient Safety Analysis (from UISA prompt) */
 export interface Ingredient {
   name: string;
-  safety: string;
-  reason: string;
+  safety_status: 'Safe' | 'Moderate' | 'Harmful'; // Updated status field
+  reason_with_source: string; // Updated reason field
 }
 
 export interface IngredientsData {
-  ingredients: Ingredient[];
+  ingredients_analysis: Ingredient[];
 }
 
-export interface SugarType {
-  type: string;
-  amount: string;
+/** Compositional Analysis (from UPCA prompt) */
+export interface CompositionalDetail {
+  key: string;
+  value: string;
 }
 
-export interface VitaminType {
-  type: string;
-  amount: string;
-}
-
-export interface NutritionData {
+export interface ICompositionAnalysis {
+  productCategory: string;
+  netQuantity: number;
+  unitType: string;
   calories: number;
-  totalSugars: string;
-  sugarTypes: SugarType[];
   totalFat: number;
-  saturatedFat: number;
-  sodium: number;
-  totalCarbohydrate: number;
-  totalFiber: number;
   totalProtein: number;
-  addedSugar: string;
-  vitamins: VitaminType[];
+  compositionalDetails: CompositionalDetail[];
+}
+
+/** Reddit Review Analysis */
+export interface Review {
+  title: string;
+  score: number;
+  url: string;
 }
 
 export interface RedditData {
@@ -44,11 +72,7 @@ export interface RedditData {
   cons: string[];
   averageRating: number;
   totalMentions: number;
-  reviews: Array<{
-    title: string;
-    score: number;
-    url: string;
-  }>;
+  reviews: Review[];
 }
 
 export interface ChatMessage {

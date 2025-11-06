@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Camera, RotateCcw, Zap, Sparkles, Images, Loader2 } from "lucide-react";
+import { Brain, Camera, RotateCcw, Zap, Sparkles, Images, Loader2, ChevronRight } from "lucide-react";
 import { useCamera } from "@/hooks/use-camera";
 import { useToast } from "@/hooks/use-toast";
 import { ProductSelectionScreen } from "./product-selection-screen"; 
 import type { ProductAnalysis } from "@/types/analysis"; 
 
-// The `onProductAnalysisStart` now takes the selected product data
+// The `onProductAnalysisStart` now takes the analysis ID
 interface CameraScreenProps {
-  onProductAnalysisStart: (productData: ProductAnalysis) => void;
+  onProductAnalysisStart: (analysisId: string) => void;
 }
 
 // Define possible view states for the component
@@ -37,11 +37,14 @@ export function CameraScreen({ onProductAnalysisStart }: CameraScreenProps) {
     }
   }, [error, toast]);
 
-  const handleProductSelect = (product: ProductAnalysis) => {
-    // 1. User selected a product, proceed to full analysis
-    // We can now safely dispose of the temporary image URL
-    if (imageThumbnailUrl) URL.revokeObjectURL(imageThumbnailUrl);
-    onProductAnalysisStart(product);
+  const handleProductSelect = (analysisId: string) => {
+    // The selection screen now passes the analysisId directly
+    onProductAnalysisStart(analysisId);
+  };
+  
+  const handleCloseSelection = () => {
+    // Close the selection screen and return to camera view
+    setView('camera');
   };
   
   const handleRescan = () => {
@@ -52,84 +55,54 @@ export function CameraScreen({ onProductAnalysisStart }: CameraScreenProps) {
     setView('camera');
   };
 
-  // Function to handle the API call
-  const callProductDetectionApi = async (base64Image: string): Promise<ProductAnalysis[]> => {
-      // NOTE: Update the URL to your actual endpoint if it changed, 
-      // otherwise, it uses the existing /api/analyze-product route 
-      // which now returns an array.
-      const response = await fetch('/api/analyze-product', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ base64Image }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API Error:', errorText);
-        throw new Error('Product analysis failed on the server.');
-      }
-      
-      // We expect the result to be an array: ProductAnalysis[]
-      const results = await response.json();
-      return results as ProductAnalysis[];
-  };
-
-  const handleProcessImage = async (file: File) => {
-    setView('loading');
-    
+  const handleCapture = async () => {
     try {
+      // Capture photo as a Blob
+      const photoBlob = await capturePhoto();
+      const file = new File([photoBlob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" });
+      
       // Create a temporary URL for the thumbnail in the selection cards
       const tempUrl = URL.createObjectURL(file);
       setImageThumbnailUrl(tempUrl);
       
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onloadend = async () => {
-          const base64Image = reader.result as string;
-          // Extract base64 data only (after the comma)
-          const dataOnly = base64Image.split(',')[1];
-          
-          // 1. Call the updated detection 
-          const results = await callProductDetectionApi(dataOnly);
-          
-          // 2. Update state to show selection screen if products were detected
-          if (results && results.length > 0) {
-            setDetectedProducts(results);
-            setView('selection');
-          } else {
-            // Handle case where no products were detected
-            toast({
-              title: "No Products Detected",
-              description: "Please try again with a clearer image of a product label.",
-              variant: "destructive",
-            });
-            setView('camera');
-          }
-      };
-    } catch (err) {
-      console.error("Error processing image:", err);
+      setView('loading'); // Show loading screen
+      
+      // Create form data for upload
+      const formData = new FormData();
+      formData.append('image', file);
+      
+      const response = await fetch("/api/analyze-product", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to analyze product image.");
+      }
+
+      // The AI now returns an array of detected products
+      const analysisResults = await response.json();
+      
+      if (Array.isArray(analysisResults) && analysisResults.length >= 1) {
+        // Always show selection screen, even for single product
+        setDetectedProducts(analysisResults);
+        setView('selection');
+      } else if (analysisResults.analysisId) {
+        // Fallback for single object/scene if the service returns a single object
+        // Create an array with the single result to show in selection screen
+        setDetectedProducts([analysisResults]);
+        setView('selection');
+      } else {
+        throw new Error("No product or scene could be identified.");
+      }
+    } catch (error) {
+      console.error("Error processing image:", error);
       toast({
         title: "Analysis Failed",
         description: "Failed to analyze the image. Please try again.",
         variant: "destructive",
       });
       setView('camera');
-    }
-  };
-
-  const handleCapture = async () => {
-    try {
-      const photoBlob = await capturePhoto();
-      const file = new File([photoBlob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" });
-      handleProcessImage(file);
-    } catch (err) {
-      toast({
-        title: "Capture Failed",
-        description: "Failed to capture photo. Please try again.",
-        variant: "destructive",
-      });
     }
   };
 
@@ -145,6 +118,53 @@ export function CameraScreen({ onProductAnalysisStart }: CameraScreenProps) {
       }
     };
     input.click();
+  };
+
+  const handleProcessImage = async (file: File) => {
+    setView('loading');
+    
+    try {
+      // Create a temporary URL for the thumbnail in the selection cards
+      const tempUrl = URL.createObjectURL(file);
+      setImageThumbnailUrl(tempUrl);
+      
+      // Create form data for upload
+      const formData = new FormData();
+      formData.append('image', file);
+      
+      const response = await fetch("/api/analyze-product", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to analyze product image.");
+      }
+
+      // The AI now returns an array of detected products
+      const analysisResults = await response.json();
+      
+      if (Array.isArray(analysisResults) && analysisResults.length >= 1) {
+        // Always show selection screen, even for single product
+        setDetectedProducts(analysisResults);
+        setView('selection');
+      } else if (analysisResults.analysisId) {
+        // Fallback for single object/scene if the service returns a single object
+        // Create an array with the single result to show in selection screen
+        setDetectedProducts([analysisResults]);
+        setView('selection');
+      } else {
+        throw new Error("No product or scene could be identified.");
+      }
+    } catch (error) {
+      console.error("Error processing image:", error);
+      toast({
+        title: "Analysis Failed",
+        description: "Failed to analyze the image. Please try again.",
+        variant: "destructive",
+      });
+      setView('camera');
+    }
   };
 
   return (
@@ -163,11 +183,49 @@ export function CameraScreen({ onProductAnalysisStart }: CameraScreenProps) {
         {/* Loading Overlay */}
         {view === 'loading' && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <div className="text-center space-y-4">
-              <Loader2 className="h-16 w-16 mx-auto text-white animate-spin" />
-              <p className="text-white text-sm px-4">
-                Analyzing image...
-              </p>
+            <div className="space-y-8 text-center animate-fade-in" data-testid="processing-screen">
+              <div className="space-y-4">
+                <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center animate-pulse">
+                  <Brain className="text-primary-foreground text-2xl" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-semibold text-white" data-testid="text-processing-title">
+                    Analyzing Product
+                  </h2>
+                  <p className="text-white/80" data-testid="text-processing-description">
+                    AI is identifying the product and extracting text...
+                  </p>
+                </div>
+              </div>
+              
+              {/* Progress Steps */}
+              <div className="space-y-6">
+                <div
+                  className="flex items-center space-x-3 p-3 rounded-lg border bg-card/90 border-border"
+                  data-testid="step-0"
+                >
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center bg-primary animate-pulse">
+                    <div className="w-2 h-2 bg-primary-foreground rounded-full" />
+                  </div>
+                  <span className="text-white">Product identified</span>
+                </div>
+                <div
+                  className="flex items-center space-x-3 p-3 rounded-lg border bg-card/70 border-border"
+                  data-testid="step-1"
+                >
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center border-2 border-white/30">
+                  </div>
+                  <span className="text-white/80">Extracting text information</span>
+                </div>
+                <div
+                  className="flex items-center space-x-3 p-3 rounded-lg border bg-card/70 border-border"
+                  data-testid="step-2"
+                >
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center border-2 border-white/30">
+                  </div>
+                  <span className="text-white/80">Preparing analysis</span>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -279,13 +337,14 @@ export function CameraScreen({ onProductAnalysisStart }: CameraScreenProps) {
         </div>
       )}
 
-      {/* Product Selection Screen */}
+      {/* Product Selection Screen Overlay - Now rendered as a modal */}
       {view === 'selection' && (
         <ProductSelectionScreen
           detectedProducts={detectedProducts}
+          imageThumbnailUrl={imageThumbnailUrl}
           onProductSelect={handleProductSelect}
           onRescan={handleRescan}
-          imageThumbnailUrl={imageThumbnailUrl}
+          onClose={handleCloseSelection}
         />
       )}
     </div>
