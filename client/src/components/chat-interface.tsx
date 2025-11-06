@@ -8,6 +8,8 @@ import type { ChatMessage } from "@/types/analysis";
 
 interface ChatInterfaceProps {
   analysisId: string;
+  productName: string;
+  extractedText: any;
 }
 
 export function ChatInterface({ analysisId }: ChatInterfaceProps) {

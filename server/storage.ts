@@ -22,11 +22,12 @@ export interface InsertUser {
 export interface ProductAnalysis {
   id: string;
   productName: string;
-  productSummary: string;
+  productSummary: string; // Renamed from summary to productSummary for clarity in this file
   extractedText: any;
   imageUrl: string | null;
+  featuresData: any | null; // NEW FIELD
   ingredientsData: any | null;
-  nutritionData: any | null;
+  compositionData: any | null;
   redditData: any | null;
   createdAt: Date;
 }
@@ -36,8 +37,9 @@ export interface InsertProductAnalysis {
   productSummary: string;
   extractedText: any;
   imageUrl?: string | null;
+  featuresData?: any | null; // NEW FIELD
   ingredientsData?: any | null;
-  nutritionData?: any | null;
+  compositionData?: any | null;
   redditData?: any | null;
 }
 
@@ -103,8 +105,9 @@ export class MemStorage implements IStorage {
       id,
       createdAt: new Date(),
       imageUrl: analysis.imageUrl || null,
+      featuresData: analysis.featuresData || null, // Initialize new field
       ingredientsData: analysis.ingredientsData || null,
-      nutritionData: analysis.nutritionData || null,
+      compositionData: analysis.compositionData || null,
       redditData: analysis.redditData || null,
     };
     this.productAnalyses.set(id, productAnalysis);

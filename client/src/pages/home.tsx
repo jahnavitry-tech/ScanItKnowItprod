@@ -1,20 +1,20 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { CameraScreen } from "@/components/camera-screen";
-import { ProcessingScreen } from "@/components/processing-screen";
 import { AnalysisScreen } from "@/components/analysis-screen";
 import { ThemeToggle } from "@/components/theme-provider";
 import { Camera } from "lucide-react";
 import type { ProductAnalysis } from "@/types/analysis";
 
-type AppState = "camera" | "processing" | "analysis";
+type AppState = "camera" | "analysis";
 
 export default function Home() {
   const [currentState, setCurrentState] = useState<AppState>("camera");
-  const [analysis, setAnalysis] = useState<ProductAnalysis | null>(null);
+  const [analysisId, setAnalysisId] = useState<string | null>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const analyzeProductMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -33,7 +33,7 @@ export default function Home() {
       return response.json();
     },
     onSuccess: (data: ProductAnalysis) => {
-      setAnalysis(data);
+      setAnalysisId(data.analysisId);
       setCurrentState("analysis");
       toast({
         title: "Analysis Complete",
@@ -50,14 +50,18 @@ export default function Home() {
     },
   });
 
-  const handlePhotoCapture = (file: File) => {
-    setCurrentState("processing");
-    analyzeProductMutation.mutate(file);
+  const handleProductAnalysisStart = (analysisId: string) => {
+    setAnalysisId(analysisId);
+    setCurrentState("analysis");
   };
 
   const handleScanAnother = () => {
     setCurrentState("camera");
-    setAnalysis(null);
+    setAnalysisId(null);
+    // Invalidate the analysis query to force a refetch if needed
+    if (analysisId) {
+      queryClient.invalidateQueries({ queryKey: ['analysis', analysisId] });
+    }
   };
 
   const handleGallerySelect = () => {
@@ -87,16 +91,13 @@ export default function Home() {
       <main className="container mx-auto px-4 py-6 max-w-md">
         {currentState === "camera" && (
           <CameraScreen
-            onPhotoCapture={handlePhotoCapture}
-            onGallerySelect={handleGallerySelect}
+            onProductAnalysisStart={handleProductAnalysisStart}
           />
         )}
 
-        {currentState === "processing" && <ProcessingScreen />}
-
-        {currentState === "analysis" && analysis && (
+        {currentState === "analysis" && analysisId && (
           <AnalysisScreen
-            analysis={analysis}
+            analysisId={analysisId}
             onScanAnother={handleScanAnother}
           />
         )}
