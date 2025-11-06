@@ -239,9 +239,9 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
   console.log("Parsed summary points:", summaryPoints);
 
   return (
-    <div className="max-w-md mx-auto px-4 py-6 bg-background" data-testid="analysis-screen">
+    <div className="max-w-md mx-auto px-4 py-6 bg-background space-y-6" data-testid="analysis-screen">
       {/* Product Header */}
-      <div className="bg-card rounded-2xl p-6 border border-border shadow-sm mb-6">
+      <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
         <div className="flex items-center space-x-4 mb-4">
           <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 border border-border flex items-center justify-center">
             <Camera className="h-8 w-8 text-primary" />
@@ -300,7 +300,7 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
       </div>
 
       {/* Action Buttons */}
-      <div className="flex space-x-3 mt-6">
+      <div className="flex space-x-3">
         <Button
           className="flex-1"
           onClick={onScanAnother}
