@@ -4,6 +4,7 @@ import { Brain, Camera, RotateCcw, Zap, Sparkles, Images, Loader2, ChevronRight 
 import { useCamera } from "@/hooks/use-camera";
 import { useToast } from "@/hooks/use-toast";
 import { ProductSelectionScreen } from "./product-selection-screen"; 
+import { ProcessingScreen } from "./processing-screen";
 import type { ProductAnalysis } from "@/types/analysis"; 
 
 // The `onProductAnalysisStart` now takes the analysis ID
@@ -183,50 +184,7 @@ export function CameraScreen({ onProductAnalysisStart }: CameraScreenProps) {
         {/* Loading Overlay */}
         {view === 'loading' && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <div className="space-y-8 text-center animate-fade-in" data-testid="processing-screen">
-              <div className="space-y-4">
-                <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center animate-pulse">
-                  <Brain className="text-primary-foreground text-2xl" />
-                </div>
-                <div className="space-y-2">
-                  <h2 className="text-2xl font-semibold text-white" data-testid="text-processing-title">
-                    Analyzing Product
-                  </h2>
-                  <p className="text-white/80" data-testid="text-processing-description">
-                    AI is identifying the product and extracting text...
-                  </p>
-                </div>
-              </div>
-              
-              {/* Progress Steps */}
-              <div className="space-y-6">
-                <div
-                  className="flex items-center space-x-3 p-3 rounded-lg border bg-card/90 border-border"
-                  data-testid="step-0"
-                >
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center bg-primary animate-pulse">
-                    <div className="w-2 h-2 bg-primary-foreground rounded-full" />
-                  </div>
-                  <span className="text-white">Product identified</span>
-                </div>
-                <div
-                  className="flex items-center space-x-3 p-3 rounded-lg border bg-card/70 border-border"
-                  data-testid="step-1"
-                >
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center border-2 border-white/30">
-                  </div>
-                  <span className="text-white/80">Extracting text information</span>
-                </div>
-                <div
-                  className="flex items-center space-x-3 p-3 rounded-lg border bg-card/70 border-border"
-                  data-testid="step-2"
-                >
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center border-2 border-white/30">
-                  </div>
-                  <span className="text-white/80">Preparing analysis</span>
-                </div>
-              </div>
-            </div>
+            <ProcessingScreen />
           </div>
         )}
         

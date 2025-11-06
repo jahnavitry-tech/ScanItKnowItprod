@@ -95,43 +95,16 @@ export function ProductSelectionScreen({
         className="fixed inset-0 bg-black bg-opacity-60 z-40 transition-opacity duration-300"
         onClick={onClose}
       />
-      
+
       {/* Bottom Sheet Container */}
       <div className="fixed bottom-0 left-0 right-0 z-50 transform transition-transform duration-300 ease-out">
-        <div className="bg-background rounded-t-3xl shadow-2xl mx-2 mb-4 border-t border-border">
+        <div className="bg-transparent shadow-2xl mx-auto mb-4 max-w-md w-full">
           {/* Drag handle for visual indication */}
           <div className="flex justify-center pt-3">
             <div className="w-12 h-1.5 bg-muted rounded-full"></div>
           </div>
           
-          {/* Header Section */}
-          <div className="flex items-center justify-between p-4 pb-2">
-            <div className="flex items-center space-x-3">
-              <div className="h-10 w-10 overflow-hidden rounded-md border border-border flex-shrink-0 shadow-sm">
-                <img
-                  src={imageThumbnailUrl}
-                  alt="Captured product thumbnail"
-                  className="h-full w-full object-cover"
-                />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold text-foreground">{detectedProducts.length === 1 ? "Product Detected" : "Multiple Items Detected"}</h2>
-                <p className="text-sm text-muted-foreground">{detectedProducts.length === 1 ? "Review and analyze this product" : "Select the product you wish to analyze"}</p>
-              </div>
-            </div>
-            
-            {/* Close button */}
-            <button 
-              onClick={onClose}
-              className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0 hover:bg-muted/80 transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-foreground" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Product Cards Container */}
+          {/* Product Cards Container - Only display cards */}
           <div className="px-4 pb-4 max-h-[60vh] overflow-y-auto">
             {detectedProducts.map((product) => (
               <ProductPreviewCard
@@ -140,17 +113,6 @@ export function ProductSelectionScreen({
                 onSelect={onProductSelect}
               />
             ))}
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex space-x-2 border-t border-border p-4 bg-card rounded-b-3xl">
-            <Button onClick={onRescan} variant="outline" className="flex-1" data-testid="button-rescan">
-              <RefreshCcw className="h-4 w-4 mr-2" />
-              Rescan Image
-            </Button>
-            <Button onClick={onClose} variant="ghost" size="icon">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
           </div>
         </div>
       </div>

@@ -7,20 +7,22 @@ export function ProcessingScreen() {
   useEffect(() => {
     const timer1 = setTimeout(() => setCurrentStep(1), 1000);
     const timer2 = setTimeout(() => setCurrentStep(2), 2000);
+    const timer3 = setTimeout(() => setCurrentStep(3), 3000);
     return () => {
       clearTimeout(timer1);
       clearTimeout(timer2);
+      clearTimeout(timer3);
     };
   }, []);
 
   const steps = [
     { text: "Product identified", completed: currentStep >= 1 },
     { text: "Extracting text information", completed: currentStep >= 2 },
-    { text: "Preparing analysis", completed: false },
+    { text: "Preparing analysis", completed: currentStep >= 3 },
   ];
 
   return (
-    <div className="space-y-8 text-center animate-fade-in" data-testid="processing-screen">
+    <div className="space-y-8 text-center animate-fade-in bg-background p-6 rounded-2xl w-full max-w-md" data-testid="processing-screen">
       <div className="space-y-4">
         <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center animate-pulse">
           <Brain className="text-primary-foreground text-2xl" />
