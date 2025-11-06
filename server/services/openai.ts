@@ -597,20 +597,23 @@ export async function generateChatResponse(question: string, productData: ChatPr
     // Use web search model for real-time grounding
     const model = genAI.getGenerativeModel({ model: ANALYSIS_MODEL });
     
-    const prompt = `You are a helpful product assistant. Answer the user's question about the product based on the provided information. Be concise but informative.
-    
-Product Information:
-Product Name: ${productData.productName}
-Product Summary: ${productData.productSummary}
-Ingredients: ${productData.extractedText.ingredients}
-Nutrition: ${productData.extractedText.nutrition}
-Question: ${question}
+    const prompt = `You are an expert AI product analysis assistant. Your role is to answer user questions about a ${productData.productName}.
 
-Output Format:
-{
-  "response": "string"
-}`;
-    
+Instructions (Prioritized for speed and breadth):
+1.  **Prioritize an accurate answer by searching the web for information about the product.**
+2.  If the answer can be found, provide a **concise, direct, and fast** answer.
+3.  If the answer requires **more than 3 lines**, format it as a **bulleted list** (using pointers).
+4.  If the information needed to answer a question is not available even after searching, politely indicate that.
+5.  **CRITICAL:** Your output **MUST be the plain text response only**. **DO NOT** wrap the response in the JSON format or include the "response" key or any surrounding code blocks.
+6.  Keep your responses short and to the point and if the final response is more than 2 lines give it in pointers format.
+
+Product Context (Use this as supplemental context, but always search externally for the answer):
+- Product Name: ${productData.productName}
+- Product Summary: ${productData.productSummary}
+- Extracted Text: ${productData.extractedText.ingredients}
+
+User Question: ${question}`;
+
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       tools: [{ googleSearch: {} } as any]
@@ -636,19 +639,22 @@ Output Format:
       
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
       
-      const prompt = `You are a helpful product assistant. Answer the user's question about the product based on the provided information. Be concise but informative.
-      
-Product Information:
-Product Name: ${productData.productName}
-Product Summary: ${productData.productSummary}
-Ingredients: ${productData.extractedText.ingredients}
-Nutrition: ${productData.extractedText.nutrition}
-Question: ${question}
+      const prompt = `You are an expert AI product analysis assistant. Your role is to answer user questions about a ${productData.productName}.
 
-Output Format:
-{
-  "response": "string"
-}`;
+Instructions (Prioritized for speed and breadth):
+1.  **Prioritize an accurate answer by searching the web for information about the product.**
+2.  If the answer can be found, provide a **concise, direct, and fast** answer.
+3.  If the answer requires **more than 3 lines**, format it as a **bulleted list** (using pointers).
+4.  If the information needed to answer a question is not available even after searching, politely indicate that.
+5.  **CRITICAL:** Your output **MUST be the plain text response only**. **DO NOT** wrap the response in the JSON format or include the "response" key or any surrounding code blocks.
+6.  Keep your responses short and to the point and if the final response is more than 2 lines give it in pointers format.
+
+Product Context (Use this as supplemental context, but always search externally for the answer):
+- Product Name: ${productData.productName}
+- Product Summary: ${productData.productSummary}
+- Extracted Text: ${productData.extractedText.ingredients}
+
+User Question: ${question}`;
       
       const result = await model.generateContent(prompt);
       const response = await result.response;
