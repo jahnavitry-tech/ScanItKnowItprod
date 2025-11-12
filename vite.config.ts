@@ -19,7 +19,13 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+      "@/components": path.resolve(import.meta.dirname, "client", "src", "components"),
+      "@/components/ui": path.resolve(import.meta.dirname, "client", "src", "components", "ui"),
+      "@/hooks": path.resolve(import.meta.dirname, "client", "src", "hooks"),
+      "@/pages": path.resolve(import.meta.dirname, "client", "src", "pages"),
+      "@/types": path.resolve(import.meta.dirname, "client", "src", "types"),
+      "@/lib": path.resolve(import.meta.dirname, "client", "src", "lib"),
+      "@/assets": path.resolve(import.meta.dirname, "attached_assets"),
     },
   },
   root: path.resolve(import.meta.dirname, "client"),
@@ -34,7 +40,7 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:4002',
+        target: 'http://localhost:10000',
         changeOrigin: true,
         secure: false,
       }
