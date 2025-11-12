@@ -3,7 +3,7 @@ import React from 'react';
 const AppIconLight: React.FC = () => {
   return (
     <img 
-      src="/src/assets/app-icon-light.png" 
+      src="/assets/app-icon-light.png" 
       alt="App Icon" 
       width="48" 
       height="48" 
