@@ -32,6 +32,11 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      external: [],
+    },
+    assetsDir: "assets",
+    assetsInlineLimit: 0,
   },
   server: {
     fs: {

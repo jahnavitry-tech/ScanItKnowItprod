@@ -3,7 +3,7 @@ import React from 'react';
 const AppTitle: React.FC = () => {
   return (
     <img 
-      src="/src/assets/app-title.png" 
+      src="/assets/app-title.png" 
       alt="App Title" 
       width="240" 
       height="42" 
