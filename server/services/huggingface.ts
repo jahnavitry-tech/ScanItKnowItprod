@@ -1,7 +1,7 @@
 import fetch from 'node-fetch';
 
 // Hugging Face Inference API for AI model access
-const HF_BASE_URL = "https://api-inference.huggingface.co/models";
+const HF_BASE_URL = "https://router.huggingface.co/hf-inference/models";
 const HF_API_KEY = process.env.HUGGINGFACE_API_KEY;
 
 // For image analysis and OCR, we'll use BLIP model

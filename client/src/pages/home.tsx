@@ -5,7 +5,9 @@ import { apiRequest } from "@/lib/queryClient";
 import { CameraScreen } from "@/components/camera-screen";
 import { AnalysisScreen } from "@/components/analysis-screen";
 import { ThemeToggle } from "@/components/theme-provider";
-import { Camera } from "lucide-react";
+import AppIconLight from "@/components/AppIconLight";
+import AppIconDark from "@/components/AppIconDark";
+import AppTitle from "@/components/AppTitle";
 import type { ProductAnalysis } from "@/types/analysis";
 
 type AppState = "camera" | "analysis";
@@ -76,11 +78,14 @@ export default function Home() {
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <Camera className="text-primary text-xl" />
-            <h1 className="text-xl font-bold" data-testid="text-app-title">
-              Scan It Know It
-            </h1>
+          <div className="flex items-center space-x-6">
+            <div className="dark:hidden">
+              <AppIconLight />
+            </div>
+            <div className="hidden dark:block">
+              <AppIconDark />
+            </div>
+            <AppTitle />
           </div>
           
           <ThemeToggle />

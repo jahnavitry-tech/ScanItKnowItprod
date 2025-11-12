@@ -42,6 +42,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Calling identifyProductAndExtractText...");
       const analysisResults = await identifyProductAndExtractText(base64Image);
       console.log("AI analysis completed, results:", analysisResults.length, "products found");
+      console.log("Analysis results:", JSON.stringify(analysisResults, null, 2));
       
       // Map the AI results to database insertion and store them
       console.log("Storing analysis results in database...");
@@ -74,6 +75,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     } catch (error) {
       console.error("Error in initial product analysis:", error);
+      // Log the full error stack trace
+      console.error("Full error stack:", (error as Error).stack);
       res.status(500).json({ error: "Failed to analyze product image" });
     }
   });

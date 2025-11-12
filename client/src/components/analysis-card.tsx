@@ -256,9 +256,16 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
               <h4 className="font-medium text-base text-foreground">Nutrition Facts</h4>
               <div className="divide-y divide-border">
                 {mainDetails.map((item: any, index: number) => (
-                  <div key={index} className="py-2 flex justify-between items-center">
-                    <span className="text-sm font-medium text-foreground">{item.key}</span>
-                    <span className="text-sm text-muted-foreground">{item.value}</span>
+                  <div key={index} className="py-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-foreground">{item.key}</span>
+                      {item.value && item.value.split(' ').length <= 3 ? (
+                        <span className="text-sm text-muted-foreground">{item.value}</span>
+                      ) : null}
+                    </div>
+                    {item.value && item.value.split(' ').length > 3 ? (
+                      <div className="text-sm text-muted-foreground mt-1">{item.value}</div>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -270,8 +277,13 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
             <div className="pt-3 border-t border-border">
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-red-700 dark:text-red-400">{addedSugarsItem.key}</span>
-                <span className="text-sm text-red-500 dark:text-red-400">{addedSugarsItem.value}</span>
+                {addedSugarsItem.value && addedSugarsItem.value.split(' ').length <= 3 ? (
+                  <span className="text-sm text-red-500 dark:text-red-400">{addedSugarsItem.value}</span>
+                ) : null}
               </div>
+              {addedSugarsItem.value && addedSugarsItem.value.split(' ').length > 3 ? (
+                <div className="text-sm text-red-500 dark:text-red-400 mt-1">{addedSugarsItem.value}</div>
+              ) : null}
             </div>
           )}
           
@@ -281,9 +293,16 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
               <h4 className="font-medium text-base mb-2 text-foreground">Sugar Types</h4>
               <div className="space-y-2">
                 {sugarTypes.map((item: any, index: number) => (
-                  <div key={index} className="flex justify-between items-center">
-                    <span className="text-sm text-foreground">{item.key}</span>
-                    <span className="text-sm text-muted-foreground">{item.value}</span>
+                  <div key={index}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-foreground">{item.key}</span>
+                      {item.value && item.value.split(' ').length <= 3 ? (
+                        <span className="text-sm text-muted-foreground">{item.value}</span>
+                      ) : null}
+                    </div>
+                    {item.value && item.value.split(' ').length > 3 ? (
+                      <div className="text-sm text-muted-foreground mt-1">{item.value}</div>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -296,9 +315,16 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
               <h4 className="font-medium text-base mb-2 text-foreground">Vitamins & Minerals</h4>
               <div className="space-y-2">
                 {vitamins.map((item: any, index: number) => (
-                  <div key={index} className="flex justify-between items-center">
-                    <span className="text-sm text-foreground">{item.key}</span>
-                    <span className="text-sm text-muted-foreground">{item.value}</span>
+                  <div key={index}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-foreground">{item.key}</span>
+                      {item.value && item.value.split(' ').length <= 3 ? (
+                        <span className="text-sm text-muted-foreground">{item.value}</span>
+                      ) : null}
+                    </div>
+                    {item.value && item.value.split(' ').length > 3 ? (
+                      <div className="text-sm text-muted-foreground mt-1">{item.value}</div>
+                    ) : null}
                   </div>
                 ))}
               </div>

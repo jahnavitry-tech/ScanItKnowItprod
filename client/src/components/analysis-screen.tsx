@@ -208,10 +208,10 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
   // If analysis data failed to load, show an error state
   if (!analysis) {
     return (
-      <div className="max-w-md mx-auto px-4 py-6 bg-background" data-testid="analysis-screen">
+      <div className="max-w-md mx-auto px-2 py-6 bg-background" data-testid="analysis-screen">
         <div className="bg-card rounded-2xl p-6 border border-border shadow-sm">
           <div className="flex items-center space-x-4 mb-4">
-            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 border border-border flex items-center justify-center">
+            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 border border-border flex items-center justify-center overflow-hidden">
               <Camera className="h-8 w-8 text-primary" />
             </div>
             <div className="flex-1">
@@ -239,18 +239,26 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
   console.log("Parsed summary points:", summaryPoints);
 
   return (
-    <div className="max-w-md mx-auto px-4 py-6 bg-background space-y-6" data-testid="analysis-screen">
+    <div className="max-w-md mx-auto px-2 py-6 bg-background space-y-6" data-testid="analysis-screen">
       {/* Product Header */}
       <div className="bg-card rounded-2xl p-6 border border-border shadow-sm space-y-4">
         <div className="flex items-center space-x-4">
-          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 border border-border flex items-center justify-center mb-4">
-            <Camera className="h-8 w-8 text-primary" />
+          <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 border border-border flex items-center justify-center mb-4 overflow-hidden">
+            {analysis?.imageUrl ? (
+              <img 
+                src={analysis.imageUrl} 
+                alt={analysis.productName} 
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <Camera className="h-8 w-8 text-primary" />
+            )}
           </div>
           <div className="flex-1">
             <h1 className="text-2xl font-bold" data-testid="text-product-name">
               {analysis?.productName || "Product Name"}
             </h1>
-            <p className="text-muted-foreground text-sm">Product Analysis</p>
+            
           </div>
           <Button 
             variant="ghost" 
@@ -264,7 +272,7 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
       
         {/* AI Summary - Always visible */}
         <div className="space-y-3">
-          <h3 className="font-semibold text-primary">Product Summary</h3>
+          
           <div className="text-sm text-muted-foreground leading-relaxed space-y-1" data-testid="text-product-summary">
             {summaryPoints && summaryPoints.length > 0 ? (
               summaryPoints.map((point, index) => (
