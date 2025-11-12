@@ -1,39 +1,46 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-async function analyzeRedditDataWithAI(productName: string, brand: string, summary: string, reviewText: string) {
+async function analyzeRedditDataWithAI(productName: string, brand: string, summary: string) {
   try {
     // Initialize Google Generative AI client inside the function to ensure env vars are loaded
     console.log("Initializing Google Generative AI with API key:", process.env.GEMINI_API_KEY ? "Present" : "Missing");
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
-    const prompt = `You are a product review sentiment analysis expert. Based on the provided product name and details identification and relevant Reddit web search results and provide a brief summary of the overall customer sentiment, Analyze the gathered Reddit reviews to extract up to 4 pros and up to 4 cons (as many as you can find, but no more than 4 each), and calculate an overall average rating (1.0-5.0). Your output MUST be a valid JSON object with the following structure: { "pros": ["string"], "cons": ["string"], "averageRating": number, "totalMentions": number, "reviews": [{"title": "string", "score": number, "url": "string"}] }. Do not add any extra text or markdown fences. Each array element must be a single, independent bullet point summary. The totalMentions and reviews fields are placeholders that will be replaced, but include them in the structure.
+    const prompt = `You are a product review sentiment analysis expert. Your task is to search Reddit for reviews of the specified product and provide a detailed analysis.
     
     **PRODUCT INFORMATION:**
     Product Name: ${productName}
     Brand: ${brand}
     Summary: ${summary}
     
-    Required Output Format:
-    [A single, short sentence summarizing the overall sentiment, including the average rating.]
+    **YOUR TASK:**
+    1. Conduct a web search on Reddit for reviews of this product
+    2. Extract specific pros and cons from actual user reviews
+    3. Calculate an average rating based on the sentiment of the reviews
     
-    -for PROS (Positive Highlights):["[Specific positive point 1 and citation]","[Specific positive point 2 and citation]","[Specific positive point 3 and citation]","[Specific positive point 4 and citation]"]
-    -for CONS (Negative Highlights): ["[Specific negative point 1 and citation]","[Specific negative point 2 and citation]","[Specific negative point 3 and citation]","[Specific negative point 4 and citation]"]
+    **OUTPUT FORMAT:**
+    Return a valid JSON object with the following structure:
+    {
+      "pros": ["Specific positive point 1 from real reviews", "Specific positive point 2 from real reviews", "Specific positive point 3 from real reviews", "Specific positive point 4 from real reviews"],
+      "cons": ["Specific negative point 1 from real reviews", "Specific negative point 2 from real reviews", "Specific negative point 3 from real reviews", "Specific negative point 4 from real reviews"],
+      "averageRating": 4.2,
+      "totalMentions": 0,
+      "reviews": []
+    }
     
-    If the review text is empty, non-substantive, or you cannot find any clear pros or cons, use these default helpful strings:
-    - For pros: ["Generally well-regarded product", "Satisfies basic expectations", "Good value for money", "Reliable brand"]
-    - For cons: ["Limited detailed feedback on Reddit", "No major complaints found", "Some users report minor issues", "Could benefit from more reviews"]
+    **IMPORTANT INSTRUCTIONS:**
+    - Extract actual quotes or paraphrased points from real Reddit reviews
+    - Do not make up generic statements
+    - If you cannot find specific Reddit reviews, return an empty array for pros and cons
+    - Do not use placeholder text like "Generally well-regarded product"
+    - The averageRating should be between 1.0 and 5.0 based on review sentiment
+    - Include citations to specific Reddit posts when possible
+    - Do not include any text outside the JSON structure
     
-    Analyze reviews for: ${productName}
+    Search for reviews of: ${productName} ${brand}`;
     
-    Reviews:
-    ${reviewText}
-    
-    Extract as many pros and cons as you can find (up to 4 each), and calculate an average rating (1-5). Return a valid JSON object with the exact structure specified. Do not include any markdown formatting or code blocks in your response. Unmixed lists of key highlights by rigidly classifying them as PROS (Positive Sentiments) and CONS (Negative Sentiments).
-    
-    Constraint: Do not include any personal opinions or other text outside of the summary and the two lists. Use appropriate citations from the search results to support each point.`;
-    
-    // Explicitly enable Google Search for grounding - using the correct tool name with type assertion
+    // Explicitly enable Google Search for grounding
     const result = await model.generateContent({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         tools: [{ googleSearch: {} } as any]
@@ -54,19 +61,26 @@ async function analyzeRedditDataWithAI(productName: string, brand: string, summa
       content = jsonMatch[0];
     }
     
-    // Since we're using a structured prompt, we can rely on standard JSON.parse
+    // Parse the JSON response
     try {
       const parsed = JSON.parse(content);
       console.log("Successfully parsed JSON:", parsed);
-      return parsed;
-    } catch (e) {
-      // Log the failure but throw a cleaner error
-      console.error("Failed to parse AI-generated JSON. Content received:", content.substring(0, 500), e);
-      // Return a default structure instead of throwing an error
+      
+      // Validate the structure and provide defaults if needed
       return {
-        pros: ["Generally well-regarded product", "Satisfies basic expectations", "Good value for money", "Reliable brand"],
-        cons: ["Limited detailed feedback on Reddit", "No major complaints found", "Some users report minor issues", "Could benefit from more reviews"],
-        averageRating: 4.0,
+        pros: Array.isArray(parsed.pros) ? parsed.pros.slice(0, 4) : [],
+        cons: Array.isArray(parsed.cons) ? parsed.cons.slice(0, 4) : [],
+        averageRating: typeof parsed.averageRating === 'number' ? Math.min(Math.max(parsed.averageRating, 1.0), 5.0) : 0,
+        totalMentions: 0,
+        reviews: []
+      };
+    } catch (e) {
+      console.error("Failed to parse AI-generated JSON. Content received:", content.substring(0, 500), e);
+      // Return empty structure instead of default text
+      return {
+        pros: [],
+        cons: [],
+        averageRating: 0,
         totalMentions: 0,
         reviews: []
       };
@@ -74,11 +88,11 @@ async function analyzeRedditDataWithAI(productName: string, brand: string, summa
     
   } catch (error) {
     console.error("Error in AI analysis:", error);
-    // Return a default structure instead of throwing an error
+    // Return empty structure instead of default text
     return {
-      pros: ["Generally well-regarded product", "Satisfies basic expectations", "Good value for money", "Reliable brand"],
-      cons: ["Limited detailed feedback on Reddit", "No major complaints found", "Some users report minor issues", "Could benefit from more reviews"],
-      averageRating: 4.0,
+      pros: [],
+      cons: [],
+      averageRating: 0,
       totalMentions: 0,
       reviews: []
     };
@@ -89,12 +103,8 @@ export async function searchRedditReviews(productName: string, brand: string, su
   try {
     console.log("Searching Reddit reviews for product:", productName);
     
-    // Instead of fetching from Reddit API, let the AI do the search directly
-    // Pass empty review text since the AI will conduct its own search
-    const reviewText = "";
-    
-    // --- AI Analysis ---
-    const aiResponse = await analyzeRedditDataWithAI(productName, brand, summary, reviewText);
+    // --- AI Analysis with web search ---
+    const aiResponse = await analyzeRedditDataWithAI(productName, brand, summary);
     
     // Set default values for placeholders
     aiResponse.reviews = [];
@@ -106,14 +116,11 @@ export async function searchRedditReviews(productName: string, brand: string, su
   } catch (error) {
     console.error("Error in searchRedditReviews or AI analysis:", error);
     
-    // Return a structured error response that matches the expected RedditData interface
-    const reason = error instanceof Error ? error.message : "Unknown API error";
-    
-    // Return fallback data structure if the API calls fail
+    // Return empty structure instead of default text
     return {
-      pros: ["Generally well-regarded product", "Satisfies basic expectations", "Good value for money", "Reliable brand"],
-      cons: ["Limited detailed feedback on Reddit", "No major complaints found", "Some users report minor issues", "Could benefit from more reviews"],
-      averageRating: 4.0,
+      pros: [],
+      cons: [],
+      averageRating: 0,
       totalMentions: 0,
       reviews: []
     };
