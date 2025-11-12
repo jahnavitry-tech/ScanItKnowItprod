@@ -226,23 +226,6 @@ export function CameraScreen({ onProductAnalysisStart }: CameraScreenProps) {
             
             {/* Top Controls */}
             <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
-              <Button
-                size="sm"
-                variant="secondary"
-                className="bg-black/40 backdrop-blur-sm text-white border-0 hover:bg-black/60"
-                data-testid="button-flash"
-              >
-                <Zap className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                className="bg-black/40 backdrop-blur-sm text-white border-0 hover:bg-black/60"
-                onClick={switchCamera}
-                data-testid="button-switch-camera"
-              >
-                <RotateCcw className="h-4 w-4" />
-              </Button>
             </div>
           </div>
         )}
@@ -275,13 +258,15 @@ export function CameraScreen({ onProductAnalysisStart }: CameraScreenProps) {
             </div>
           </Button>
 
-          {/* AI Scan Mode */}
+          {/* Camera Switch Button */}
           <Button
             size="lg"
-            className="w-14 h-14 rounded-xl"
-            data-testid="button-ai-scan"
+            variant="outline"
+            className="w-14 h-14 rounded-xl p-0"
+            onClick={switchCamera}
+            data-testid="button-switch-camera-bottom"
           >
-            <Sparkles className="h-6 w-6" />
+            <RotateCcw className="h-6 w-6" />
           </Button>
         </div>
       )}
