@@ -5,6 +5,7 @@ async function analyzeRedditDataWithAI(productName: string, brand: string, summa
     // Initialize Google Generative AI client inside the function to ensure env vars are loaded
     console.log("Initializing Google Generative AI with API key:", process.env.GEMINI_API_KEY ? "Present" : "Missing");
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+    // Use the same analysis model as other services
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
     const prompt = `You are a product review sentiment analysis expert. Your task is to search Reddit for reviews of the specified product and provide a detailed analysis.
