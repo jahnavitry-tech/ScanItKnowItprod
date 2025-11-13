@@ -6,16 +6,16 @@ const AppTitle: React.FC = () => {
       <img 
         src="/assets/app-title.png" 
         alt="App Title" 
-        width="240" 
-        height="42" 
-        className="w-60 h-10 dark:hidden"
+        width="196" 
+        height="40" 
+        className="w-[196px] h-10 dark:hidden"
       />
       <img 
         src="/assets/app-title-dark.png" 
         alt="App Title" 
-        width="240" 
-        height="42" 
-        className="w-60 h-10 hidden dark:block"
+        width="196" 
+        height="40" 
+        className="w-[196px] h-10 hidden dark:block"
       />
     </>
   );
