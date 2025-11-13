@@ -30,6 +30,7 @@ export interface ProductAnalysis {
   compositionData: any | null;
   redditData: any | null;
   createdAt: Date;
+  isFallbackMode: boolean; // Add fallback mode flag
 }
 
 export interface InsertProductAnalysis {
@@ -41,6 +42,7 @@ export interface InsertProductAnalysis {
   ingredientsData?: any | null;
   compositionData?: any | null;
   redditData?: any | null;
+  isFallbackMode?: boolean; // Add fallback mode flag
 }
 
 export interface ChatMessage {
@@ -109,6 +111,7 @@ export class MemStorage implements IStorage {
       ingredientsData: analysis.ingredientsData || null,
       compositionData: analysis.compositionData || null,
       redditData: analysis.redditData || null,
+      isFallbackMode: analysis.isFallbackMode || false, // Initialize fallback mode flag
     };
     this.productAnalyses.set(id, productAnalysis);
     return productAnalysis;

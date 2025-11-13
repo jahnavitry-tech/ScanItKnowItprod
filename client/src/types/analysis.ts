@@ -21,6 +21,7 @@ export interface ProductAnalysis {
   ingredientsData: IngredientsData | null;
   compositionData: ICompositionAnalysis | null;
   redditData: RedditData | null;
+  isFallbackMode: boolean; // Add fallback mode flag
 }
 
 // --- Deep Analysis Types ---

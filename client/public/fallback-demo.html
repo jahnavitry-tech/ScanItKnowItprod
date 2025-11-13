@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Fallback (Tesseract + TF.js)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src='https://unpkg.com/tesseract.js@4.1.0/dist/tesseract.min.js'></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.2.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+    <style>
+        /* Styles remain consistent */
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .card { box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .loading-ring { border: 4px solid #f3f3f3; border-top: 4px solid #10b981; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="p-4 md:p-10 flex flex-col items-center min-h-screen">
+    <div class="w-full max-w-4xl bg-white p-6 md:p-8 rounded-xl card">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-3">Primary (Gemini) with Free Fallback</h1>
+
+        <div class="mb-6">
+            <label for="imageUpload" class="block text-sm font-medium text-gray-700 mb-2">Upload Image</label>
+            <input type="file" id="imageUpload" accept="image/*" class="w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none p-2.5">
+            <p class="mt-2 text-xs text-gray-500">The primary attempt simulates a call to your Gemini 2.5 Flash endpoint.</p>
+        </div>
+
+        <div class="flex space-x-4 mb-8">
+            <button id="analyzeBtn" onclick="runAnalysisFlow()" class="flex-1 flex items-center justify-center bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition duration-150 disabled:opacity-50">
+                <span id="analyzeText">Run Analysis (Primary Gemini)</span>
+                <span id="analyzeLoader" class="hidden loading-ring"></span>
+            </button>
+        </div>
+
+        <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4" id="resultsTitle">Analysis Results</h2>
+            <div id="resultsContent" class="text-gray-600 whitespace-pre-wrap min-h-[100px]">
+                Awaiting image upload and analysis...
+            </div>
+            <div id="imagePreviewContainer" class="mt-4 hidden max-w-full">
+                <p class="text-sm font-medium mb-2">Image Preview:</p>
+                <img id="imagePreview" class="max-w-full h-auto rounded-lg shadow-md" />
+            </div>
+        </div>
+    </div>
+
+    <div id="fallbackModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 hidden items-center justify-center p-4 z-50 transition-opacity duration-300">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full transform transition-transform duration-300 scale-95">
+            <h3 class="text-xl font-bold text-yellow-600 mb-3">API Failure Detected</h3>
+            <p class="text-gray-700 mb-4">The <strong>Main API (Gemini)</strong> has issues. Falling back to <strong>Free, Client-Side Analysis (Tesseract + TF.js)</strong>. Results may be less detailed.</p>
+            <button onclick="hideModal()" class="w-full bg-yellow-600 text-white py-2 rounded-lg font-semibold hover:bg-yellow-700 transition duration-150">Acknowledge</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Global Variables and Initializers ---
+        const imageUpload = document.getElementById('imageUpload');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const imagePreview = document.getElementById('imagePreview');
+        const resultsTitle = document.getElementById('resultsTitle');
+        const resultsContent = document.getElementById('resultsContent');
+        const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+        
+        let imageUrl = null;
+        let tesseractWorker = null;
+        let mobileNetModel = null;
+
+        // Initialize Tesseract worker and MobileNet model concurrently
+        async function initWorkers() {
+            resultsContent.textContent = "Initializing free client-side engines (Tesseract and MobileNet)...";
+            try {
+                // Tesseract Initialization
+                tesseractWorker = await Tesseract.createWorker('eng', 1, { logger: m => console.log('Tesseract:', m) });
+                // MobileNet Initialization
+                mobileNetModel = await mobilenet.load();
+                
+                resultsContent.textContent = "All engines ready. Please upload an image.";
+            } catch (e) {
+                resultsContent.textContent = "Error initializing client-side engines. Check console for details.";
+                console.error("Initialization Error:", e);
+            }
+        }
+        initWorkers();
+
+        // --- Utility and UI Functions ---
+
+        function showModal() {
+            document.getElementById('fallbackModal').classList.remove('hidden');
+            document.getElementById('fallbackModal').classList.add('flex');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function hideModal() {
+            document.getElementById('fallbackModal').classList.add('hidden');
+            document.getElementById('fallbackModal').classList.remove('flex');
+            document.body.style.overflow = '';
+        }
+
+        function setButtonsState(isLoading) {
+            analyzeBtn.disabled = isLoading;
+            document.getElementById('analyzeLoader').classList.toggle('hidden', !isLoading);
+            document.getElementById('analyzeText').classList.toggle('hidden', isLoading);
+            analyzeBtn.disabled = !imageUrl && !isLoading;
+        }
+
+        imageUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                if (imageUrl) URL.revokeObjectURL(imageUrl);
+                imageUrl = URL.createObjectURL(file);
+                imagePreview.src = imageUrl;
+                imagePreviewContainer.classList.remove('hidden');
+                analyzeBtn.disabled = false;
+                resultsContent.textContent = "Image uploaded. Ready for analysis.";
+            }
+        });
+
+        // --- Primary API Simulation ---
+
+        async function callPrimaryGemini(imageElement) {
+            resultsContent.textContent = "Calling Primary Gemini API (simulated)...";
+            resultsTitle.textContent = "Primary Analysis in Progress";
+
+            // The '503 Service Unavailable' is what triggers the fallback.
+            const simulateFailure = Math.random() < 0.8; // High failure rate to test fallback logic
+            
+            // Assume your server-side code handles backoff and retries, 
+            // and only fails the client after all retries are exhausted.
+            if (simulateFailure) {
+                // Simulate persistent failure (e.g., all 5 backoff retries failed)
+                await new Promise((_, reject) => setTimeout(() => reject(new Error("Persistent 503 Service Unavailable")), 2000));
+            }
+
+            // Simulated Success Response (If not failed)
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            return {
+                title: "Gemini 2.5 Flash Result (Simulated)",
+                content: "Gemini response: The image is a bottle of The Ordinary Hyaluronic Acid 2% + B5. The full ingredient analysis is:\n- Hyaluronic Acid (Primary active)\n- B5 (Panthenol)\n- Preservatives and Water.\n\n**Confidence: High**"
+            };
+        }
+
+        // --- Fallback Analysis Implementation ---
+
+        async function runFallbackAnalysis(imageElement) {
+            resultsTitle.textContent = "Running Free Fallback Analysis (Tesseract + TF.js)";
+            resultsContent.textContent = "Running Recognition (MobileNet)...";
+
+            // 1. Image Recognition (TensorFlow.js / MobileNet)
+            const predictions = await mobileNetModel.classify(imageElement);
+            let recognitionText = "Object Recognition (TF.js):\n";
+            predictions.slice(0, 3).forEach(p => {
+                recognitionText += `- ${p.className} (Confidence: ${Math.round(p.probability * 100)}%)\n`;
+            });
+            
+            // 2. OCR (Tesseract.js)
+            resultsContent.textContent = recognitionText + "\nRunning OCR (Tesseract.js)...";
+            const { data: { text: ocrText } } = await tesseractWorker.recognize(imageElement);
+            
+            return {
+                title: "Fallback Analysis Results",
+                content: recognitionText + "\n\n--- OCR Text Extraction (Tesseract) ---\n" + (ocrText.trim() || "No text detected by Tesseract.")
+            };
+        }
+
+        // --- Main Execution Flow ---
+
+        async function runAnalysisFlow() {
+            if (!imageUrl || !tesseractWorker || !mobileNetModel) {
+                resultsContent.textContent = "Engines not fully initialized. Please wait a moment.";
+                return;
+            }
+            
+            setButtonsState(true);
+
+            try {
+                // 1. PRIMARY ATTEMPT
+                const result = await callPrimaryGemini(imagePreview);
+                resultsTitle.textContent = result.title;
+                resultsContent.textContent = result.content;
+
+            } catch (error) {
+                // 2. FALLBACK EXECUTION
+                console.warn("Primary API failed, executing fallback:", error.message);
+                showModal(); // Show the custom notification
+                
+                try {
+                    const fallbackResult = await runFallbackAnalysis(imagePreview);
+                    resultsTitle.textContent = fallbackResult.title;
+                    resultsContent.textContent = fallbackResult.content;
+                } catch (fallbackError) {
+                    // Final failure if the client-side engines also fail
+                    resultsTitle.textContent = "Critical Failure";
+                    resultsContent.textContent = `Both primary and fallback analysis failed:
+
+Primary Error: ${error.message}
+
+Fallback Error: ${fallbackError.message}
+
+Please try uploading a different image or check your internet connection.`;
+                }
+            } finally {
+                setButtonsState(false);
+            }
+        }
+    </script>
+</body>
+</html>

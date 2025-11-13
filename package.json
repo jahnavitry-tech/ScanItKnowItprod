@@ -73,7 +73,10 @@
     "wouter": "^3.3.5",
     "ws": "^8.18.0",
     "zod": "^3.24.2",
-    "zod-validation-error": "^3.4.0"
+    "zod-validation-error": "^3.4.0",
+    "tesseract.js": "^4.1.0",
+    "@tensorflow/tfjs": "^4.20.0",
+    "@tensorflow-models/mobilenet": "^2.1.1"
   },
   "devDependencies": {
     "@replit/vite-plugin-cartographer": "^0.3.0",
