@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { identifyProductAndExtractText, analyzeIngredients, analyzeComposition, analyzeFeatures, generateChatResponse } from "./services/openai";
 import { searchRedditReviews } from "./services/reddit";
+import { analyzeIngredientsFallback, analyzeCompositionFallback, analyzeRedditFallback } from "./services/fallbackGrounding";
 import multer from "multer";
 
 // --- TYPE HINT FOR SELECTED PRODUCT ---
@@ -38,20 +39,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const imageUrl = `data:${req.file.mimetype};base64,${base64Image}`;
       console.log("Image converted to base64, size:", base64Image.length);
       
-      // Initial AI processing - returns an array of products
-      console.log("Calling identifyProductAndExtractText...");
-      const analysisResults = await identifyProductAndExtractText(base64Image);
-      console.log("AI analysis completed, results:", analysisResults.length, "products found");
-      console.log("Analysis results:", JSON.stringify(analysisResults, null, 2));
+      let analysisResults;
+      let isFallbackMode = false;
       
+      try {
+        // PRIMARY PATH: Attempt Gemini Multimodal Analysis
+        console.log("Calling identifyProductAndExtractText...");
+        analysisResults = await identifyProductAndExtractText(base64Image);
+        console.log("AI analysis completed, results:", analysisResults.length, "products found");
+        console.log("Analysis results:", JSON.stringify(analysisResults, null, 2));
+      } catch (error) {
+        // FALLBACK PATH: Use local classification (MobileNet/Tesseract)
+        console.warn("Gemini failure. Initiating fallback mode.");
+        isFallbackMode = true;
+        
+        // For now, we'll create a basic fallback result
+        // In a real implementation, this would use the client-side OCR/classification
+        analysisResults = [{
+          productName: "Fallback Product",
+          extractedText: {
+            ingredients: "Fallback OCR: Unable to extract detailed ingredients without client-side processing",
+            nutrition: "Fallback Analysis: Please check product packaging for nutrition facts",
+            brand: "Unknown Brand"
+          },
+          summary: "This analysis used a fallback method due to primary AI service unavailability. For detailed information, please check the product packaging."
+        }];
+      }
+
       // Map the AI results to database insertion and store them
       console.log("Storing analysis results in database...");
       const storedAnalyses = await Promise.all(analysisResults.map(async (productData) => {
           const inserted = await storage.createProductAnalysis({
               productName: productData.productName,
-              productSummary: productData.summary,
+              productSummary: productData.summary, // Use the summary property
               extractedText: productData.extractedText,
               imageUrl: imageUrl, // Store the base64 image once per capture
+              isFallbackMode: isFallbackMode // Set the fallback mode flag
           });
           console.log("Stored analysis for product:", productData.productName, "with ID:", inserted.id);
           // Return the full object which includes the new ID
@@ -61,6 +84,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               productSummary: inserted.productSummary,  // Fixed: Use productSummary to match frontend type
               extractedText: inserted.extractedText,
               imageUrl: inserted.imageUrl,
+              isFallbackMode: inserted.isFallbackMode, // Include fallback mode flag
               // All deep analysis fields start as null
               featuresData: null,
               ingredientsData: null,
@@ -77,6 +101,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error in initial product analysis:", error);
       // Log the full error stack trace
       console.error("Full error stack:", (error as Error).stack);
+      // More detailed error logging
+      if (error instanceof Error) {
+        console.error("Error name:", error.name);
+        console.error("Error message:", error.message);
+        // If it's a specific error we can identify, provide more context
+        if (error.message.includes("HuggingFace")) {
+          console.error("This is a HuggingFace API error. Please check your HUGGINGFACE_API_KEY and network connectivity.");
+        } else if (error.message.includes("GEMINI")) {
+          console.error("This is a Google Gemini API error. Please check your GEMINI_API_KEY and network connectivity.");
+        }
+      }
       res.status(500).json({ error: "Failed to analyze product image" });
     }
   });
@@ -210,8 +245,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(analysis.ingredientsData);
       }
 
-      // Run the ingredients analysis with additional product information
-      const ingredientAnalysis = await analyzeIngredients(analysis.productName, analysis.extractedText.brand, analysis.productSummary, analysis.extractedText);
+      let ingredientAnalysis;
+      
+      if (analysis.isFallbackMode) {
+        // Fallback Path: Use Web Grounding Service
+        console.log("Using fallback grounding for ingredients analysis");
+        ingredientAnalysis = await analyzeIngredientsFallback(analysis);
+      } else {
+        // Primary Path: Use Gemini Service
+        console.log("Using primary Gemini service for ingredients analysis");
+        ingredientAnalysis = await analyzeIngredients(analysis.productName, analysis.extractedText.brand, analysis.productSummary, analysis.extractedText);
+      }
       
       // Update storage with the result
       const updatedAnalysis = await storage.updateProductAnalysis(analysisId, { 
@@ -245,8 +289,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(analysis.compositionData);
       }
 
-      // Run the composition analysis with additional product information
-      const composition = await analyzeComposition(analysis.productName, analysis.extractedText.brand, analysis.productSummary, analysis.extractedText);
+      let composition;
+      
+      if (analysis.isFallbackMode) {
+        // Fallback Path: Use Web Grounding Service
+        console.log("Using fallback grounding for composition analysis");
+        composition = await analyzeCompositionFallback(analysis);
+      } else {
+        // Primary Path: Use Gemini Service
+        console.log("Using primary Gemini service for composition analysis");
+        composition = await analyzeComposition(analysis.productName, analysis.extractedText.brand, analysis.productSummary, analysis.extractedText);
+      }
       
       // Update storage with the result
       const updatedAnalysis = await storage.updateProductAnalysis(analysisId, { 
@@ -280,8 +333,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(analysis.redditData);
       }
 
-      // Run the reddit analysis with additional product information
-      const reviews = await searchRedditReviews(analysis.productName, analysis.extractedText.brand, analysis.productSummary);
+      let reviews;
+      
+      if (analysis.isFallbackMode) {
+        // Fallback Path: Use Web Grounding Service
+        console.log("Using fallback grounding for reddit analysis");
+        reviews = await analyzeRedditFallback(analysis);
+      } else {
+        // Primary Path: Use Reddit Service
+        console.log("Using primary reddit service for reddit analysis");
+        reviews = await searchRedditReviews(analysis.productName, analysis.extractedText.brand, analysis.productSummary);
+      }
       
       // Update storage with the result
       const updatedAnalysis = await storage.updateProductAnalysis(analysisId, { 

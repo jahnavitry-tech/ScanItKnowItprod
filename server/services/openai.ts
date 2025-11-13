@@ -4,9 +4,10 @@ import {
   analyzeIngredientsHF, 
   generateChatResponseHF 
 } from "./huggingface";
+import { analyzeImageWithFallback } from "./fallback";
 
 // Flag to use HuggingFace instead of Google to avoid rate limits
-const USE_HUGGINGFACE = true;
+const USE_HUGGINGFACE = false;
 
 // Demo mode disabled - using real HuggingFace API
 const DEMO_MODE = false;
@@ -15,6 +16,10 @@ const DEMO_MODE = false;
 const VISION_MODEL = "gemini-2.5-flash";
 const ANALYSIS_MODEL = "gemini-2.5-flash";
 
+// Counter for tracking Gemini API failures
+let geminiFailureCount = 0;
+const MAX_GEMINI_FAILURES = 3;
+
 export async function identifyProductAndExtractText(base64Image: string): Promise<Array<{
   productName: string;
   extractedText: any;
@@ -22,9 +27,20 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
 }>> {
   // Check for the preferred HuggingFace flag first
   if (USE_HUGGINGFACE) {
-    const result = await analyzeImageWithVision(base64Image);
-    // Return as array for consistency
-    return [result];
+    try {
+      const result = await analyzeImageWithVision(base64Image);
+      // Return as array for consistency
+      return [result];
+    } catch (error) {
+      console.error("Error in HuggingFace image analysis:", error);
+      if (error instanceof Error) {
+        console.error("HuggingFace error name:", error.name);
+        console.error("HuggingFace error message:", error.message);
+        console.error("HuggingFace error stack:", error.stack);
+      }
+      // Re-throw the error to be handled by the calling function
+      throw error;
+    }
   }
 
   // --- Start Gemini Logic ---
@@ -32,7 +48,15 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
       console.error("GEMINI_API_KEY is missing. Initial image analysis cannot proceed.");
-      throw new Error("GEMINI_API_KEY is not configured.");
+      // Fallback to client-side analysis if Gemini API key is missing
+      try {
+        console.log("Falling back to client-side analysis due to missing API key...");
+        const fallbackResult = await analyzeImageWithFallback(base64Image);
+        return [fallbackResult];
+      } catch (fallbackError) {
+        console.error("Fallback analysis also failed:", fallbackError);
+        throw new Error("Both primary and fallback analysis methods failed");
+      }
   }
   
   // Initialize Google Generative AI client inside the function to guarantee API key availability
@@ -62,19 +86,19 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
     **ROLE:** Autonomous Report Agent (ARA).
     **OUTPUT:** ONLY a JSON array. DO NOT include ANY extra text. The array MUST contain a unique JSON object for EACH distinct product (Brandable or Non-Brandable) or main subject identified.
     **TASK:** Analyze the image. Prioritize **FULL, VERBATIM INGREDIENTS LIST EXTRACTION** and **QR/Barcode data capture**.
-
+    
     **IF PRODUCT/GOODS (Brandable Item):**
     1.  **Extract Text:**
         * **INGREDIENTS:** Capture the **FULL, VERBATIM ingredients list**.
         * **NUTRITION:** Capture the **main calorie and serving size data** or key nutritional claims.
         * **BRAND:** Capture the Brand name, Product name, and **ALL QR/Barcode data**.
     2.  **Summary:** Summarize key features, intended purpose, and typical usage (**MAX 3 lines**).
-
+    
     **IF SCENE/SUBJECT/FOOD (Non-Brandable, e.g., Full English Breakfast, Plant):**
     1.  **Extract Text:** Set 'nutrition' and 'brand' fields to **'Not applicable'**.
     2.  **Ingredients Field:** List ALL clearly identifiable components/ingredients of the food or visual elements of the scene (e.g., 'Fried Eggs, Sausages, Baked Beans, Plate, Marble Countertop').
     3.  **Summary:** Provide a detailed, descriptive identity and context (**MAX 3 lines**).
-
+    
     **JSON SCHEMA:**[{"productName": "string", "extractedText": {"ingredients": "string", "nutrition": "string", "brand": "string"}, "summary": "string"}]
     `;
 
@@ -90,6 +114,9 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
     const response = await result.response;
     const content = response.text() || "";
     console.log("Received response from Gemini:", content.substring(0, 200) + "...");
+    
+    // Reset failure count on success
+    geminiFailureCount = 0;
     
     let resultData;
     
@@ -120,12 +147,60 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
     return resultData;
   } catch (error) {
     console.error("Error identifying product with ARA:", error);
+    geminiFailureCount++;
+    
     // Log more detailed error information
     if (error instanceof Error) {
       console.error("Error name:", error.name);
       console.error("Error message:", error.message);
       console.error("Error stack:", error.stack);
+      
+      // Check for specific Google API errors
+      if (error.message.includes("404 Not Found") && error.message.includes("models/")) {
+        console.error("Model not found error. Please check that the model name is correct and supported.");
+        return [{
+          productName: "Model Error",
+          extractedText: { ingredients: "N/A", nutrition: "N/A", brand: "System" },
+          summary: "The specified AI model is not available. Please contact the system administrator."
+        }];
+      } else if (error.message.includes("503 Service Unavailable") && error.message.includes("overloaded")) {
+        console.error("Model overloaded error. The service is temporarily unavailable.");
+        
+        // If we've exceeded the maximum number of failures, use fallback
+        if (geminiFailureCount >= MAX_GEMINI_FAILURES) {
+          console.log(`Gemini API has failed ${geminiFailureCount} times, switching to fallback method...`);
+          try {
+            const fallbackResult = await analyzeImageWithFallback(base64Image);
+            return [fallbackResult];
+          } catch (fallbackError) {
+            console.error("Fallback analysis also failed:", fallbackError);
+            return [{
+              productName: "Service Overloaded",
+              extractedText: { ingredients: "N/A", nutrition: "N/A", brand: "System" },
+              summary: "The AI service is temporarily overloaded and fallback analysis also failed. Please try again in a few minutes."
+            }];
+          }
+        }
+        
+        return [{
+          productName: "Service Overloaded",
+          extractedText: { ingredients: "N/A", nutrition: "N/A", brand: "System" },
+          summary: "The AI service is temporarily overloaded. Please try again in a few minutes."
+        }];
+      }
     }
+    
+    // If it's not a specific error we handle, try fallback if we've had multiple failures
+    if (geminiFailureCount >= MAX_GEMINI_FAILURES) {
+      console.log(`Gemini API has failed ${geminiFailureCount} times, attempting fallback method...`);
+      try {
+        const fallbackResult = await analyzeImageWithFallback(base64Image);
+        return [fallbackResult];
+      } catch (fallbackError) {
+        console.error("Fallback analysis also failed:", fallbackError);
+      }
+    }
+    
     // Return a structured error response on API failure
     return [{
       productName: "API Error",
@@ -541,6 +616,10 @@ Respond with **valid JSON only**. The JSON must strictly adhere to the following
       }
     } catch (fallbackError) {
       console.error("Error in fallback composition analysis:", fallbackError);
+      // Check for specific model errors
+      if (fallbackError instanceof Error && fallbackError.message.includes("404 Not Found") && fallbackError.message.includes("models/")) {
+        console.error("Fallback model not found error. Please check that the model name is correct and supported.");
+      }
       return { 
         productCategory: "",
         netQuantity: 0,
