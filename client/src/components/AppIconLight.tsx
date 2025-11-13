@@ -5,9 +5,9 @@ const AppIconLight: React.FC = () => {
     <img 
       src="/assets/app-icon-light.png" 
       alt="App Icon" 
-      width="48" 
-      height="48" 
-      className="w-12 h-12"
+      width="32" 
+      height="32" 
+      className="w-8 h-8"
     />
   );
 };
