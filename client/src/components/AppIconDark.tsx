@@ -1,13 +1,17 @@
 import React from 'react';
 
-const AppIconDark: React.FC = () => {
+interface AppIconDarkProps {
+  className?: string;
+}
+
+const AppIconDark: React.FC<AppIconDarkProps> = ({ className = '' }) => {
   return (
     <img 
       src="/assets/app-icon-dark.png" 
       alt="App Icon" 
       width="32" 
       height="32" 
-      className="w-8 h-8"
+      className={`w-8 h-8 ${className}`}
     />
   );
 };

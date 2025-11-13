@@ -79,11 +79,9 @@ export default function Home() {
       <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="dark:hidden">
-              <AppIconLight />
-            </div>
-            <div className="hidden dark:block">
-              <AppIconDark />
+            <div className="relative">
+              <AppIconLight className="dark:hidden" />
+              <AppIconDark className="hidden dark:block" />
             </div>
             <AppTitle />
           </div>
