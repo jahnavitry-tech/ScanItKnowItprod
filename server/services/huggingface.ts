@@ -45,6 +45,12 @@ export async function analyzeImageWithVision(base64Image: string): Promise<any> 
     
   } catch (error) {
     console.error("Error with HuggingFace vision:", error);
+    // More detailed error logging
+    if (error instanceof Error) {
+      console.error("Error name:", error.name);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+    }
     throw new Error("Failed to analyze image with HuggingFace");
   }
 }
