@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Camera, Save, Share, Loader2, Flame, Star } from "lucide-react";
+import { Camera, Save, Share, Loader2, Flame, Star, Leaf, MessageCircle } from "lucide-react";
 import { AnalysisCard } from "./analysis-card";
 import type { ProductAnalysis, CardType, CardData, IngredientsData, RedditData, ICompositionAnalysis, IFeaturesData } from "@/types/analysis";
 import { apiRequest } from "@/lib/queryClient";
@@ -163,16 +163,16 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
 
   const cards = [
     { 
-      type: 'ingredients' as CardType, 
-      title: "Ingredient Safety", 
-      description: "In-depth safety analysis of every ingredient.",
-      icon: null
-    },
-    { 
       type: 'calories' as CardType, 
       title: "Nutrition Facts", 
       description: "Detailed nutritional information and calories.",
       icon: Flame
+    },
+    { 
+      type: 'ingredients' as CardType, 
+      title: "Ingredient Safety", 
+      description: "In-depth safety analysis of every ingredient.",
+      icon: Leaf
     },
     { 
       type: 'reddit' as CardType, 
@@ -184,7 +184,7 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
       type: 'qa' as CardType, 
       title: "Ask the AI", 
       description: "Ask specific questions about the analysis.",
-      icon: null
+      icon: MessageCircle
     },
   ];
 
