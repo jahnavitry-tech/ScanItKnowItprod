@@ -6,7 +6,7 @@ import {
 } from "./huggingface";
 
 // Flag to use HuggingFace instead of Google to avoid rate limits
-const USE_HUGGINGFACE = false;
+const USE_HUGGINGFACE = true;
 
 // Demo mode disabled - using real HuggingFace API
 const DEMO_MODE = false;
@@ -120,6 +120,12 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
     return resultData;
   } catch (error) {
     console.error("Error identifying product with ARA:", error);
+    // Log more detailed error information
+    if (error instanceof Error) {
+      console.error("Error name:", error.name);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+    }
     // Return a structured error response on API failure
     return [{
       productName: "API Error",
