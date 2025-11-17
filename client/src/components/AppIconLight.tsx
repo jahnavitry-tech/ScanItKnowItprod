@@ -6,12 +6,14 @@ interface AppIconLightProps {
 
 const AppIconLight: React.FC<AppIconLightProps> = ({ className = '' }) => {
   return (
+    // Original: width="48" height="48" className={`w-12 h-12 ${className}`}
+    // MODERN HEADER UPDATE - Design Request 001: Resizing to 32dp-40dp range for Material Design compliance
     <img 
       src="/assets/app-icon-light.png" 
       alt="ScanItKnowIt App Icon" 
-      width="48" 
-      height="48" 
-      className={`w-12 h-12 ${className}`}
+      width="40" 
+      height="40" 
+      className={`w-10 h-10 ${className}`}
     />
   );
 };

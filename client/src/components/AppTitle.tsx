@@ -4,7 +4,7 @@ const AppTitle: React.FC = () => {
   return (
     <>
       <img 
-        src="/assets/app-title.png" 
+        src="/assets/app-title-light.png" 
         alt="App Title" 
         width="196" 
         height="40" 

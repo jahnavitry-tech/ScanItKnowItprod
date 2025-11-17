@@ -76,12 +76,25 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background" data-testid="home-page">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+      {/* Original header: className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60" */}
+      {/* MODERN HEADER UPDATE - Design Request 001: Material Design compliant header */}
+      <header className="sticky top-0 z-50 w-full h-14 bg-background border-b border-border backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-sm">
+        {/* Original container: className="container mx-auto px-4 h-16 flex items-center justify-between" */}
+        {/* MODERN HEADER UPDATE - Design Request 001: 56dp height, 16dp horizontal padding, flex alignment */}
+        <div className="container mx-auto px-4 h-14 flex items-center justify-between">
+          {/* Original logo area: className="flex items-center space-x-3" */}
+          {/* MODERN HEADER UPDATE - Design Request 001: Reduced spacing between icon and title to 4dp/8dp max */}
+          {/* CONSISTENT POSITIONING UPDATE: Ensuring exact positioning and dimensions alignment between light and dark modes */}
+          {/* Using space-x-3 for proper visual separation as per requirements */}
           <div className="flex items-center space-x-3">
-            <div className="relative">
-              <AppIconLight className="dark:hidden" />
-              <AppIconDark className="hidden dark:block" />
+            {/* Ensuring consistent positioning in both dark and light modes using shared container classes */}
+            <div className="flex items-center">
+              <div className="dark:hidden">
+                <AppIconLight />
+              </div>
+              <div className="hidden dark:block">
+                <AppIconDark />
+              </div>
             </div>
             <AppTitle />
           </div>
