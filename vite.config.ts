@@ -25,7 +25,7 @@ export default defineConfig({
       "@/pages": path.resolve(import.meta.dirname, "client", "src", "pages"),
       "@/types": path.resolve(import.meta.dirname, "client", "src", "types"),
       "@/lib": path.resolve(import.meta.dirname, "client", "src", "lib"),
-      "@/assets": path.resolve(import.meta.dirname, "attached_assets"),
+      "@/assets": path.resolve(import.meta.dirname, "client", "src", "assets"),
     },
   },
   root: path.resolve(import.meta.dirname, "client"),
