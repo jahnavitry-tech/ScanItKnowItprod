@@ -226,6 +226,7 @@ export function CameraScreen({ onProductAnalysisStart }: CameraScreenProps) {
             
             {/* Top Controls */}
             <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
+              {/* Flash and other top controls would go here if needed */}
             </div>
           </div>
         )}
@@ -238,7 +239,7 @@ export function CameraScreen({ onProductAnalysisStart }: CameraScreenProps) {
           <Button
             size="lg"
             variant="outline"
-            className="w-14 h-14 rounded-xl p-0"
+            className="w-16 h-16 rounded-xl p-0" // Increased from w-14 h-14 to w-16 h-16 (44x44px minimum)
             onClick={handleGalleryClick}
             data-testid="button-gallery"
           >
@@ -262,7 +263,7 @@ export function CameraScreen({ onProductAnalysisStart }: CameraScreenProps) {
           <Button
             size="lg"
             variant="outline"
-            className="w-14 h-14 rounded-xl p-0"
+            className="w-16 h-16 rounded-xl p-0" // Increased from w-14 h-14 to w-16 h-16 (44x44px minimum)
             onClick={switchCamera}
             data-testid="button-switch-camera-bottom"
           >

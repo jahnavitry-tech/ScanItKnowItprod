@@ -436,7 +436,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
     if (cardType === 'qa') {
       return (
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+          <div className="w-11 h-11 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center"> {/* Changed from w-10 h-10 to w-11 h-11 */}
             <MessageCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
           </div>
           <div>
@@ -450,7 +450,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
     if (cardType === 'ingredients') {
       return (
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+          <div className="w-11 h-11 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center"> {/* Changed from w-10 h-10 to w-11 h-11 */}
             <Leaf className="h-5 w-5 text-green-600 dark:text-green-400" />
           </div>
           <div>
@@ -464,7 +464,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
     if (cardType === 'calories' && Icon) {
       return (
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+          <div className="w-11 h-11 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center"> {/* Changed from w-10 h-10 to w-11 h-11 */}
             <Icon className="h-5 w-5 text-orange-600 dark:text-orange-400" />
           </div>
           <div>
@@ -478,7 +478,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
     if (cardType === 'reddit' && Icon) {
       return (
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+          <div className="w-11 h-11 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center"> {/* Changed from w-10 h-10 to w-11 h-11 */}
             <Icon className="h-5 w-5 text-red-600 dark:text-red-400" />
           </div>
           <div>
@@ -491,7 +491,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
 
     return (
       <div className="flex items-center space-x-3">
-        <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
+        <div className="w-11 h-11 rounded-xl bg-secondary flex items-center justify-center"> {/* Changed from w-10 h-10 to w-11 h-11 */}
           {/* This is where the icon would go, but we're keeping it simple for now */}
         </div>
         <div>
