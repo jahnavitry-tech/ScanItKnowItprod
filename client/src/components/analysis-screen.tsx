@@ -1,9 +1,19 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Camera, Save, Share, Loader2, Flame, Star, Leaf, MessageCircle } from "lucide-react";
+import { Camera, Share, Loader2, Flame, Star, Leaf, MessageCircle, MessageSquare } from "lucide-react";
 import { AnalysisCard } from "./analysis-card";
 import type { ProductAnalysis, CardType, CardData, IngredientsData, RedditData, ICompositionAnalysis, IFeaturesData } from "@/types/analysis";
 import { apiRequest } from "@/lib/queryClient";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 interface AnalysisScreenProps {
   analysisId: string;
@@ -37,6 +47,10 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
     reddit: false,
     qa: false,
   });
+  
+  // Feedback dialog state
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
     const loadInitialAnalysis = async () => {
@@ -188,9 +202,20 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
     },
   ];
 
-  // Print functionality for sharing and saving
+  // Print functionality for sharing
   const handlePrint = () => {
     window.print();
+  };
+  
+  // Handle feedback submission
+  const handleFeedbackSubmit = () => {
+    const toEmail = "scanitknowit@gmail.com";
+    const subject = "Suggestions for ScanItKnowIt Update";
+    const encodedBody = encodeURIComponent(feedback);
+    const mailtoLink = `mailto:${toEmail}?subject=${encodeURIComponent(subject)}&body=${encodedBody}`;
+    window.location.href = mailtoLink;
+    setIsFeedbackOpen(false);
+    setFeedback("");
   };
 
   if (loading) {
@@ -317,14 +342,52 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
           <Camera className="h-4 w-4 mr-2" />
           Scan Another
         </Button>
-        <Button 
-          variant="outline" 
-          size="icon" 
-          data-testid="button-save"
-          onClick={handlePrint}
-        >
-          <Save className="h-5 w-5" />
-        </Button>
+        <Dialog open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
+          <DialogTrigger asChild>
+            <Button 
+              variant="outline" 
+              size="icon" 
+              data-testid="button-feedback"
+            >
+              <MessageSquare className="h-5 w-5" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px] rounded-lg">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold">Help Us Build Your Next Update</DialogTitle>
+              <DialogDescription className="text-sm">
+                Tell us how we can make your experience better and suggest the next feature you want to see.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <Textarea
+                placeholder="Add feedback"
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                className="min-h-[120px] w-full rounded-lg border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              />
+            </div>
+            <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setIsFeedbackOpen(false);
+                  setFeedback("");
+                }}
+                className="h-12"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleFeedbackSubmit}
+                className="h-12"
+                disabled={!feedback.trim()}
+              >
+                Submit
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
