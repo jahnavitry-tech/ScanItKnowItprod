@@ -210,19 +210,53 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
   // Handle feedback submission
   const handleFeedbackSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate feedback is not empty
+    if (!feedback.trim()) {
+      return;
+    }
+    
     const toEmail = "scanitknowit@gmail.com";
     const subject = "Suggestions for ScanItKnowIt Update";
-    const encodedBody = encodeURIComponent(feedback);
-    const mailtoLink = `mailto:${toEmail}?subject=${encodeURIComponent(subject)}&body=${encodedBody}`;
+    const body = feedback;
     
-    // Open the mailto link
-    window.location.href = mailtoLink;
+    // Properly encode all components
+    const encodedTo = encodeURIComponent(toEmail);
+    const encodedSubject = encodeURIComponent(subject);
+    const encodedBody = encodeURIComponent(body);
+    
+    // Construct the mailto link with all parameters
+    const mailtoLink = `mailto:${encodedTo}?subject=${encodedSubject}&body=${encodedBody}`;
+    
+    // Debug logging to verify the link
+    console.log("Mailto link:", mailtoLink);
+    
+    // Try multiple methods to open the mailto link
+    try {
+      // Method 1: Direct assignment
+      window.location.href = mailtoLink;
+    } catch (error) {
+      console.error("Error opening mailto link (method 1):", error);
+      try {
+        // Method 2: Create temporary link and click
+        const link = document.createElement('a');
+        link.href = mailtoLink;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (error2) {
+        console.error("Error opening mailto link (method 2):", error2);
+        // Method 3: Open in new window/tab
+        window.open(mailtoLink, '_blank');
+      }
+    }
     
     // Close the dialog and reset feedback after a short delay
     setTimeout(() => {
       setIsFeedbackOpen(false);
       setFeedback("");
-    }, 100);
+    }, 500);
   };
 
   if (loading) {
