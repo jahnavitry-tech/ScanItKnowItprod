@@ -208,14 +208,21 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
   };
   
   // Handle feedback submission
-  const handleFeedbackSubmit = () => {
+  const handleFeedbackSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
     const toEmail = "scanitknowit@gmail.com";
     const subject = "Suggestions for ScanItKnowIt Update";
     const encodedBody = encodeURIComponent(feedback);
     const mailtoLink = `mailto:${toEmail}?subject=${encodeURIComponent(subject)}&body=${encodedBody}`;
+    
+    // Open the mailto link
     window.location.href = mailtoLink;
-    setIsFeedbackOpen(false);
-    setFeedback("");
+    
+    // Close the dialog and reset feedback after a short delay
+    setTimeout(() => {
+      setIsFeedbackOpen(false);
+      setFeedback("");
+    }, 100);
   };
 
   if (loading) {
@@ -353,39 +360,42 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px] rounded-lg">
-            <DialogHeader>
-              <DialogTitle className="text-xl font-bold">Help Us Build Your Next Update</DialogTitle>
-              <DialogDescription className="text-sm">
-                Tell us how we can make your experience better and suggest the next feature you want to see.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <Textarea
-                placeholder="Add feedback"
-                value={feedback}
-                onChange={(e) => setFeedback(e.target.value)}
-                className="min-h-[120px] w-full rounded-lg border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-              />
-            </div>
-            <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setIsFeedbackOpen(false);
-                  setFeedback("");
-                }}
-                className="h-12"
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleFeedbackSubmit}
-                className="h-12"
-                disabled={!feedback.trim()}
-              >
-                Submit
-              </Button>
-            </DialogFooter>
+            <form onSubmit={handleFeedbackSubmit}>
+              <DialogHeader>
+                <DialogTitle className="text-xl font-bold">Help Us Build Your Next Update</DialogTitle>
+                <DialogDescription className="text-sm">
+                  Tell us how we can make your experience better and suggest the next feature you want to see.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <Textarea
+                  placeholder="Add feedback"
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  className="min-h-[120px] w-full rounded-lg border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                />
+              </div>
+              <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setIsFeedbackOpen(false);
+                    setFeedback("");
+                  }}
+                  className="h-12"
+                  type="button"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  className="h-12"
+                  disabled={!feedback.trim()}
+                  type="submit"
+                >
+                  Submit
+                </Button>
+              </DialogFooter>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
