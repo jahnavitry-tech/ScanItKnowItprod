@@ -8,10 +8,10 @@ const AppIconDark: React.FC<AppIconDarkProps> = ({ className = '' }) => {
   return (
     <img 
       src="/assets/app-icon-dark.png" 
-      alt="App Icon" 
-      width="32" 
-      height="32" 
-      className={`w-8 h-8 ${className}`}
+      alt="ScanItKnowIt App Icon" 
+      width="48" 
+      height="48" 
+      className={`w-12 h-12 ${className}`}
     />
   );
 };

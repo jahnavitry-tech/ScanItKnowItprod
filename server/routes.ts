@@ -4,6 +4,8 @@ import { storage } from "./storage";
 import { identifyProductAndExtractText, analyzeIngredients, analyzeComposition, analyzeFeatures, generateChatResponse } from "./services/openai";
 import { searchRedditReviews } from "./services/reddit";
 import { analyzeIngredientsFallback, analyzeCompositionFallback, analyzeRedditFallback } from "./services/fallbackGrounding";
+import { extractTextWithOCR, extractProductInfoFromOCR, searchOpenFoodFacts, searchOpenBeautyFacts, extractFromOpenFoodFacts, extractFromOpenBeautyFacts, extractGeneralItemInfo } from "./services/ocrFallback";
+import { searchUSDAFDC, mapUSDAtoCompositionSchema } from "./services/usdaFdc";
 import multer from "multer";
 
 // --- TYPE HINT FOR SELECTED PRODUCT ---
@@ -49,21 +51,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log("AI analysis completed, results:", analysisResults.length, "products found");
         console.log("Analysis results:", JSON.stringify(analysisResults, null, 2));
       } catch (error) {
-        // FALLBACK PATH: Use local classification (MobileNet/Tesseract)
-        console.warn("Gemini failure. Initiating fallback mode.");
+        // FALLBACK PATH: Use OCR + Open Food Facts/Open Beauty Facts
+        console.warn("Gemini failure. Initiating OCR fallback mode.");
         isFallbackMode = true;
         
-        // For now, we'll create a basic fallback result
-        // In a real implementation, this would use the client-side OCR/classification
-        analysisResults = [{
-          productName: "Fallback Product",
-          extractedText: {
-            ingredients: "Fallback OCR: Unable to extract detailed ingredients without client-side processing",
-            nutrition: "Fallback Analysis: Please check product packaging for nutrition facts",
-            brand: "Unknown Brand"
-          },
-          summary: "This analysis used a fallback method due to primary AI service unavailability. For detailed information, please check the product packaging."
-        }];
+        try {
+          // Step 1.1: OCR
+          console.log("Performing OCR on image...");
+          const ocrResult = await extractTextWithOCR(base64Image);
+          const ocrText = ocrResult.ParsedText || "";
+          
+          // Step 1.2: Try barcode search
+          console.log("Extracting product info from OCR text...");
+          const productInfo = extractProductInfoFromOCR(ocrText);
+          
+          if (productInfo.barcode) {
+            console.log("Valid barcode found, searching databases...");
+            
+            // Try Open Food Facts first (for food products)
+            let foodFactsData = await searchOpenFoodFacts(productInfo.barcode);
+            
+            if (foodFactsData) {
+              console.log("Product found in Open Food Facts");
+              const extractedData = extractFromOpenFoodFacts(foodFactsData);
+              
+              analysisResults = [{
+                productName: extractedData.productName,
+                extractedText: {
+                  ingredients: extractedData.ingredients,
+                  nutrition: `Calories: ${extractedData.nutrition.calories}, Fat: ${extractedData.nutrition.fat}g, Protein: ${extractedData.nutrition.protein}g`,
+                  brand: extractedData.brand
+                },
+                summary: `Product category: ${extractedData.productCategory || "Food"}. This is a food product identified through barcode lookup.`
+              }];
+            } else {
+              // Try Open Beauty Facts (for cosmetic products)
+              const beautyFactsData = await searchOpenBeautyFacts(productInfo.barcode);
+              
+              if (beautyFactsData) {
+                console.log("Product found in Open Beauty Facts");
+                const extractedData = extractFromOpenBeautyFacts(beautyFactsData);
+                
+                analysisResults = [{
+                  productName: extractedData.productName,
+                  extractedText: {
+                    ingredients: extractedData.ingredients,
+                    nutrition: "Non-food product - No nutrition information available",
+                    brand: extractedData.brand
+                  },
+                  summary: `Product category: ${extractedData.productCategory || "Cosmetic"}. This is a cosmetic product identified through barcode lookup.`
+                }];
+              } else {
+                // Barcode found but not in either database
+                analysisResults = [{
+                  productName: productInfo.productName,
+                  extractedText: {
+                    ingredients: "Ingredients not available through barcode lookup",
+                    nutrition: "Product information not available in databases",
+                    brand: productInfo.brand
+                  },
+                  summary: "Product identified through OCR with barcode, but detailed information not available in food or beauty databases."
+                }];
+              }
+            }
+          } else {
+            // No valid barcode, use general item extraction
+            console.log("No valid barcode found, using general item extraction...");
+            const generalInfo = extractGeneralItemInfo(ocrText);
+            
+            analysisResults = [{
+              productName: generalInfo.productName,
+              extractedText: {
+                ingredients: generalInfo.ingredients,
+                nutrition: "General item - Nutrition information not applicable",
+                brand: generalInfo.brand
+              },
+              summary: `General item identified through OCR text parsing. Category: ${generalInfo.productCategory || "Unspecified"}.`
+            }];
+          }
+        } catch (ocrError) {
+          console.error("OCR fallback also failed:", ocrError);
+          // Final fallback
+          analysisResults = [{
+            productName: "Fallback Product",
+            extractedText: {
+              ingredients: "Fallback OCR: Unable to extract detailed ingredients without client-side processing",
+              nutrition: "Fallback Analysis: Please check product packaging for nutrition facts",
+              brand: "Unknown Brand"
+            },
+            summary: "This analysis used a fallback method due to primary AI service unavailability. For detailed information, please check the product packaging."
+          }];
+        }
       }
 
       // Map the AI results to database insertion and store them
@@ -248,9 +326,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let ingredientAnalysis;
       
       if (analysis.isFallbackMode) {
-        // Fallback Path: Use Web Grounding Service
-        console.log("Using fallback grounding for ingredients analysis");
-        ingredientAnalysis = await analyzeIngredientsFallback(analysis);
+        // Fallback Path: Use Open Food Facts/Open Beauty Facts or Web Grounding Service
+        console.log("Using fallback path for ingredients analysis");
+        
+        // Try to get ingredients from Open Food Facts if we have a barcode
+        if (analysis.extractedText.barcode) {
+          try {
+            // Determine which database to use based on product category
+            let productData = null;
+            
+            if (analysis.productSummary && analysis.productSummary.toLowerCase().includes("cosmetic")) {
+              // Try Open Beauty Facts for cosmetics
+              productData = await searchOpenBeautyFacts(analysis.extractedText.barcode);
+            } else {
+              // Try Open Food Facts for food products
+              productData = await searchOpenFoodFacts(analysis.extractedText.barcode);
+            }
+            
+            if (productData && productData.ingredients_text) {
+              // Map database ingredients to our format
+              const ingredientsList = productData.ingredients_text.split(/[,;]/).map((i: string) => i.trim()).filter((i: string) => i.length > 0);
+              const ingredientsAnalysis = ingredientsList.map((ingredient: string) => ({
+                name: ingredient,
+                safety_status: "Safe", // Default to safe for now
+                reason_with_source: "Identified through Open Food/Beauty Facts database lookup"
+              }));
+              
+              ingredientAnalysis = { ingredients_analysis: ingredientsAnalysis };
+            } else {
+              // Fallback to web grounding service
+              ingredientAnalysis = await analyzeIngredientsFallback(analysis);
+            }
+          } catch (error) {
+            console.error("Database lookup failed, using web grounding:", error);
+            ingredientAnalysis = await analyzeIngredientsFallback(analysis);
+          }
+        } else {
+          // Use web grounding service
+          ingredientAnalysis = await analyzeIngredientsFallback(analysis);
+        }
       } else {
         // Primary Path: Use Gemini Service
         console.log("Using primary Gemini service for ingredients analysis");
@@ -292,9 +406,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let composition;
       
       if (analysis.isFallbackMode) {
-        // Fallback Path: Use Web Grounding Service
-        console.log("Using fallback grounding for composition analysis");
-        composition = await analyzeCompositionFallback(analysis);
+        // Fallback Path: Use category-specific APIs
+        console.log("Using fallback path for composition analysis");
+        
+        // Determine category from extracted data
+        let productCategory = "General/Unspecified";
+        if (analysis.extractedText.nutrition && analysis.extractedText.nutrition.toLowerCase().includes("calories")) {
+          productCategory = "Food/Consumable";
+        } else if (analysis.productSummary && (analysis.productSummary.toLowerCase().includes("cosmetic") || analysis.productSummary.toLowerCase().includes("beauty"))) {
+          productCategory = "Cosmetic/Topical";
+        }
+        
+        // Use appropriate API based on category
+        if (productCategory === "Food/Consumable") {
+          // Use USDA FDC API
+          try {
+            const usdaData = await searchUSDAFDC(analysis.productName);
+            composition = mapUSDAtoCompositionSchema(usdaData);
+          } catch (error) {
+            console.error("USDA FDC lookup failed:", error);
+            composition = await analyzeCompositionFallback(analysis);
+          }
+        } else if (productCategory === "Cosmetic/Topical") {
+          // For cosmetics, try to get data from Open Beauty Facts
+          try {
+            if (analysis.extractedText.barcode) {
+              const beautyFactsData = await searchOpenBeautyFacts(analysis.extractedText.barcode);
+              if (beautyFactsData) {
+                // Create composition data for cosmetic products
+                composition = {
+                  productCategory: "Cosmetic/Topical",
+                  netQuantity: 0,
+                  unitType: "ml", // Default for cosmetics
+                  calories: 0,
+                  totalFat: 0,
+                  totalProtein: 0,
+                  compositionalDetails: [] as Array<{ key: string; value: string }>
+                };
+                
+                // Add available details from Open Beauty Facts
+                if (beautyFactsData.quantity) {
+                  composition.compositionalDetails.push({
+                    key: "Quantity",
+                    value: beautyFactsData.quantity
+                  });
+                }
+                
+                if (beautyFactsData.ingredients_text) {
+                  composition.compositionalDetails.push({
+                    key: "Ingredients",
+                    value: beautyFactsData.ingredients_text
+                  });
+                }
+                
+                if (beautyFactsData.categories) {
+                  composition.compositionalDetails.push({
+                    key: "Category",
+                    value: beautyFactsData.categories
+                  });
+                }
+              } else {
+                // Fallback to web grounding service
+                composition = await analyzeCompositionFallback(analysis);
+              }
+            } else {
+              // Fallback to web grounding service
+              composition = await analyzeCompositionFallback(analysis);
+            }
+          } catch (error) {
+            console.error("Open Beauty Facts lookup failed:", error);
+            composition = await analyzeCompositionFallback(analysis);
+          }
+        } else {
+          // Use web grounding service for general items
+          composition = await analyzeCompositionFallback(analysis);
+        }
       } else {
         // Primary Path: Use Gemini Service
         console.log("Using primary Gemini service for composition analysis");
@@ -336,9 +522,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let reviews;
       
       if (analysis.isFallbackMode) {
-        // Fallback Path: Use Web Grounding Service
-        console.log("Using fallback grounding for reddit analysis");
-        reviews = await analyzeRedditFallback(analysis);
+        // Fallback Path: Return null as per zero-cost plan
+        console.log("Using fallback path for reddit analysis - returning null");
+        reviews = null;
       } else {
         // Primary Path: Use Reddit Service
         console.log("Using primary reddit service for reddit analysis");
@@ -373,13 +559,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Analysis not found" });
       }
 
-      // Generate AI response - UPDATED to use new field names
-      const aiResponse = await generateChatResponse(message, {
-        productName: analysis.productName,
-        productSummary: analysis.productSummary,
-        extractedText: analysis.extractedText,
-        ingredientsData: analysis.ingredientsData,
-      });
+      let aiResponse;
+      
+      if (analysis.isFallbackMode) {
+        // Fallback Path: Return standard message as per zero-cost plan
+        console.log("Using fallback path for chat - returning standard message");
+        aiResponse = "Interactive Q&A is temporarily unavailable due to current system constraints.";
+      } else {
+        // Primary Path: Use AI Service
+        console.log("Using primary AI service for chat response");
+        // Generate AI response - UPDATED to use new field names
+        aiResponse = await generateChatResponse(message, {
+          productName: analysis.productName,
+          productSummary: analysis.productSummary,
+          extractedText: analysis.extractedText,
+          ingredientsData: analysis.ingredientsData,
+        });
+      }
 
       // Save chat message
       const chatMessage = await storage.createChatMessage({

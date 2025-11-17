@@ -68,8 +68,8 @@ const ProductPreviewCard: React.FC<{ product: ProductAnalysis; onSelect: (id: st
       {/* Spacing between text and icon */}
       <div className="w-3" />
 
-      {/* Action Icon */}
-      <div className="w-10 h-10 rounded-lg bg-indigo-500 flex items-center justify-center flex-shrink-0">
+      {/* Action Icon - Increased size to meet 44x44px minimum */}
+      <div className="w-11 h-11 rounded-lg bg-indigo-500 flex items-center justify-center flex-shrink-0"> {/* Changed from w-10 h-10 to w-11 h-11 */}
         <ChevronRight className="h-5 w-5 text-white" />
       </div>
     </div>
