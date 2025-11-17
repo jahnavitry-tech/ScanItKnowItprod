@@ -10,7 +10,7 @@ export function ThemeToggle() {
       variant="outline"
       size="sm"
       onClick={toggleTheme}
-      className="h-10 w-10 p-0"
+      className="h-11 w-11 p-0" // Increased from h-10 w-10 to h-11 w-11 (44x44px minimum)
       data-testid="button-theme-toggle"
     >
       {theme === "light" ? (

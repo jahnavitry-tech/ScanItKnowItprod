@@ -1,0 +1,21 @@
+{
+  "name": "ScanItKnowIt - AI Product Search",
+  "short_name": "ScanItKnowIt",
+  "description": "AI-powered product search analysis application that scans any product or image or barcodes to provide detailed ingredient, nutrition, and safety information.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ff7a00",
+  "icons": [
+    {
+      "src": "/assets/favicon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/favicon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
