@@ -4,21 +4,113 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <meta name="description" content="ScanItKnowIt - AI-powered product search analysis application that scans any product or image or barcodes to provide detailed ingredient, nutrition, and safety information.">
+    <meta name="theme-color" content="#4F46E5">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ScanItKnowIt">
+    <meta name="mobile-web-app-capable" content="yes">
+    
     <!-- Favicon declarations for all required sizes -->
-    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicon-48x48.png">
-    <link rel="icon" type="image/png" sizes="180x180" href="/assets/favicon-180x180.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-192x192.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="/assets/favicon-512x512.png">
+    <!-- Light mode favicons -->
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-light-16x16.png" id="favicon-16" media="(prefers-color-scheme: light)">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-light-32x32.png" id="favicon-32" media="(prefers-color-scheme: light)">
+    <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicon-light-48x48.png" id="favicon-48" media="(prefers-color-scheme: light)">
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-light-96x96.png" id="favicon-96" media="(prefers-color-scheme: light)">
+    <link rel="icon" type="image/png" sizes="180x180" href="/assets/favicon-light-180x180.png" id="favicon-180" media="(prefers-color-scheme: light)">
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-light-192x192.png" id="favicon-192" media="(prefers-color-scheme: light)">
+    <link rel="icon" type="image/png" sizes="512x512" href="/assets/favicon-light-512x512.png" id="favicon-512" media="(prefers-color-scheme: light)">
+    
+    <!-- Dark mode favicons -->
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-dark-16x16.png" id="favicon-16-dark" media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-dark-32x32.png" id="favicon-32-dark" media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicon-dark-48x48.png" id="favicon-48-dark" media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-dark-96x96.png" id="favicon-96-dark" media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/png" sizes="180x180" href="/assets/favicon-dark-180x180.png" id="favicon-180-dark" media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-dark-192x192.png" id="favicon-192-dark" media="(prefers-color-scheme: dark)">
+    <link rel="icon" type="image/png" sizes="512x512" href="/assets/favicon-dark-512x512.png" id="favicon-512-dark" media="(prefers-color-scheme: dark)">
+    
+    <!-- Default favicons (fallback) -->
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-light-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-light-32x32.png">
+    <link rel="icon" type="image/png" sizes="48x48" href="/assets/favicon-light-48x48.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-light-96x96.png">
+    <link rel="icon" type="image/png" sizes="180x180" href="/assets/favicon-light-180x180.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/favicon-light-192x192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/assets/favicon-light-512x512.png">
+    
     <!-- Apple touch icon for iOS home screen -->
-    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon-180x180.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon-light-180x180.png" id="apple-touch-icon">
+    
     <!-- Manifest for PWA support -->
     <link rel="manifest" href="/assets/manifest.json">
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Fira+Code:wght@300..700&family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400..700;1,400..700&family=Merriweather:ital,opsz,wght@0,18..144,300..900;1,18..144,300..900&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Outfit:wght@100..900&family=Oxanium:wght@200..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,wght@0,100..900;1,100..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,200..900;1,8..60,200..900&family=Space+Grotesk:wght@300..700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
-    <title>ScanItKnowIt - AI Product Search</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    
+    <title>ScanItKnowIt: Instantly Scan & Analyze Product Ingredients | AI Search</title>
+    
+    <!-- Script to dynamically switch favicons based on theme -->
+    <script>
+      function updateFavicons(theme) {
+        const isDark = theme === 'dark';
+        const faviconSuffix = isDark ? 'dark' : 'light';
+        
+        // Update all favicons
+        document.getElementById('favicon-16').href = `/assets/favicon-${faviconSuffix}-16x16.png`;
+        document.getElementById('favicon-32').href = `/assets/favicon-${faviconSuffix}-32x32.png`;
+        document.getElementById('favicon-48').href = `/assets/favicon-${faviconSuffix}-48x48.png`;
+        document.getElementById('favicon-96').href = `/assets/favicon-${faviconSuffix}-96x96.png`;
+        document.getElementById('favicon-180').href = `/assets/favicon-${faviconSuffix}-180x180.png`;
+        document.getElementById('favicon-192').href = `/assets/favicon-${faviconSuffix}-192x192.png`;
+        document.getElementById('favicon-512').href = `/assets/favicon-${faviconSuffix}-512x512.png`;
+        
+        // Update Apple touch icon
+        document.getElementById('apple-touch-icon').href = `/assets/favicon-${faviconSuffix}-180x180.png`;
+      }
+      
+      // Check for theme on initial load
+      function initializeFavicons() {
+        // Check for saved theme in localStorage
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+          updateFavicons(savedTheme);
+          return;
+        }
+        
+        // Check system preference
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          updateFavicons('dark');
+        } else {
+          updateFavicons('light');
+        }
+      }
+      
+      // Listen for system theme changes
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+          const savedTheme = localStorage.getItem('theme');
+          // Only update if user hasn't explicitly set a theme
+          if (!savedTheme) {
+            updateFavicons(e.matches ? 'dark' : 'light');
+          }
+        });
+      }
+      
+      // Initialize favicons
+      initializeFavicons();
+    </script>
+    
+    <!-- Structured Data for Rich Snippets -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "ScanItKnowIt: Instantly Scan & Analyze Product ",
+      "description": "AI-powered analysis for ingredients, nutrition, and safety. Scan any product, image, or barcode instantly. Get the detailed facts before you buy.",
+      "url": "https://www.scanitknowit.com/"
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
