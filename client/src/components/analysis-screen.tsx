@@ -220,36 +220,83 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
     const subject = "Suggestions for ScanItKnowIt Update";
     const body = feedback;
     
-    // Properly encode all components
+    // Create mailto link with proper encoding
     const encodedTo = encodeURIComponent(toEmail);
     const encodedSubject = encodeURIComponent(subject);
     const encodedBody = encodeURIComponent(body);
     
-    // Construct the mailto link with all parameters
+    // Construct the mailto link
     const mailtoLink = `mailto:${encodedTo}?subject=${encodedSubject}&body=${encodedBody}`;
     
     // Debug logging to verify the link
     console.log("Mailto link:", mailtoLink);
+    console.log("Decoded components:");
+    console.log("  To:", decodeURIComponent(encodedTo));
+    console.log("  Subject:", decodeURIComponent(encodedSubject));
+    console.log("  Body:", decodeURIComponent(encodedBody));
     
-    // Try multiple methods to open the mailto link
+    // Try to open the mailto link with multiple fallback methods
+    let opened = false;
+    
+    // Method 1: Direct assignment (most reliable)
     try {
-      // Method 1: Direct assignment
+      const previousUrl = window.location.href;
       window.location.href = mailtoLink;
+      console.log("Mailto link opened via window.location.href");
+      
+      // Give it a moment to see if the page actually navigates
+      setTimeout(() => {
+        if (window.location.href === previousUrl) {
+          console.warn("Mailto link may not have opened an email client");
+          // Show a user-friendly message
+          alert("If your email client didn't open automatically, please check that you have a default email application set up on your system. You can also manually copy the following information:\n\nTo: scanitknowit@gmail.com\nSubject: Suggestions for ScanItKnowIt Update\nBody: " + body);
+        }
+      }, 500);
+      
+      opened = true;
     } catch (error) {
-      console.error("Error opening mailto link (method 1):", error);
+      console.error("Failed to open mailto via window.location.href:", error);
+    }
+    
+    // Method 2: If method 1 fails, try creating a temporary link
+    if (!opened) {
       try {
-        // Method 2: Create temporary link and click
         const link = document.createElement('a');
         link.href = mailtoLink;
-        link.style.display = 'none';
+        link.target = '_self'; // Important for mailto links
+        link.rel = 'noopener noreferrer';
+        link.style.position = 'absolute';
+        link.style.left = '-9999px';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-      } catch (error2) {
-        console.error("Error opening mailto link (method 2):", error2);
-        // Method 3: Open in new window/tab
-        window.open(mailtoLink, '_blank');
+        console.log("Mailto link opened via temporary link element");
+        opened = true;
+      } catch (error) {
+        console.error("Failed to open mailto via temporary link:", error);
       }
+    }
+    
+    // Method 3: If both methods fail, try window.open
+    if (!opened) {
+      try {
+        const popup = window.open(mailtoLink, '_self');
+        if (popup) {
+          console.log("Mailto link opened via window.open");
+          opened = true;
+        } else {
+          console.error("window.open returned null - popup blocked or mailto failed");
+        }
+      } catch (error) {
+        console.error("Failed to open mailto via window.open:", error);
+      }
+    }
+    
+    // If all methods failed, show an error message to the user
+    if (!opened) {
+      console.error("All methods to open mailto link failed");
+      // Show a user-friendly error message with manual instructions
+      alert("Unable to automatically open your email client. Please manually send an email to scanitknowit@gmail.com with the subject 'Suggestions for ScanItKnowIt Update' and include your feedback in the body:\n\n" + body);
     }
     
     // Close the dialog and reset feedback after a short delay
@@ -293,16 +340,12 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
   }
 
   // Parse summary into bullet points - handle potential undefined summary
-  const summaryPoints = analysis.productSummary
+  const summaryPoints = analysis?.productSummary
     ? analysis.productSummary
         .split('\n')
         .filter(line => line.trim())
         .map(line => line.replace(/^[•\-\*]\s*/, ''))
     : [];
-
-  // Log the summary for debugging
-  console.log("Product summary:", analysis.productSummary);
-  console.log("Parsed summary points:", summaryPoints);
 
   return (
     <div className="max-w-md mx-auto px-2 py-6 bg-background space-y-6" data-testid="analysis-screen">
