@@ -319,7 +319,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Only run analysis if not already done
-      if (analysis.ingredientsData) {
+      // NOTE: This check is bypassed for recall functionality
+      if (analysis.ingredientsData && !req.body.forceRefresh) {
         return res.json(analysis.ingredientsData);
       }
 
@@ -383,6 +384,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to analyze ingredients" });
     }
   });
+  
+  // New endpoint specifically for recalling ingredients data (bypasses existing data check)
+  app.post("/api/recall-ingredients", async (req, res) => {
+    try {
+      const { analysisId } = req.body;
+      
+      if (!analysisId) {
+        return res.status(400).json({ error: "Analysis ID is required" });
+      }
+
+      const analysis = await storage.getProductAnalysis(analysisId);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+
+      // Always run analysis for recall (bypass existing data check)
+      console.log("Forcing refresh of ingredients data for recall");
+      
+      let ingredientAnalysis;
+      
+      if (analysis.isFallbackMode) {
+        // Fallback Path: Use Open Food Facts/Open Beauty Facts or Web Grounding Service
+        console.log("Using fallback path for ingredients analysis");
+        
+        // Try to get ingredients from Open Food Facts if we have a barcode
+        if (analysis.extractedText.barcode) {
+          try {
+            // Determine which database to use based on product category
+            let productData = null;
+            
+            if (analysis.productSummary && analysis.productSummary.toLowerCase().includes("cosmetic")) {
+              // Try Open Beauty Facts for cosmetics
+              productData = await searchOpenBeautyFacts(analysis.extractedText.barcode);
+            } else {
+              // Try Open Food Facts for food products
+              productData = await searchOpenFoodFacts(analysis.extractedText.barcode);
+            }
+            
+            if (productData && productData.ingredients_text) {
+              // Map database ingredients to our format
+              const ingredientsList = productData.ingredients_text.split(/[,;]/).map((i: string) => i.trim()).filter((i: string) => i.length > 0);
+              const ingredientsAnalysis = ingredientsList.map((ingredient: string) => ({
+                name: ingredient,
+                safety_status: "Safe", // Default to safe for now
+                reason_with_source: "Identified through Open Food/Beauty Facts database lookup"
+              }));
+              
+              ingredientAnalysis = { ingredients_analysis: ingredientsAnalysis };
+            } else {
+              // Fallback to web grounding service
+              ingredientAnalysis = await analyzeIngredientsFallback(analysis);
+            }
+          } catch (error) {
+            console.error("Database lookup failed, using web grounding:", error);
+            ingredientAnalysis = await analyzeIngredientsFallback(analysis);
+          }
+        } else {
+          // Use web grounding service
+          ingredientAnalysis = await analyzeIngredientsFallback(analysis);
+        }
+      } else {
+        // Primary Path: Use Gemini Service
+        console.log("Using primary Gemini service for ingredients analysis");
+        ingredientAnalysis = await analyzeIngredients(analysis.productName, analysis.extractedText.brand, analysis.productSummary, analysis.extractedText);
+      }
+      
+      // Update storage with the result
+      const updatedAnalysis = await storage.updateProductAnalysis(analysisId, { 
+        ingredientsData: ingredientAnalysis
+      });
+      
+      res.json(updatedAnalysis?.ingredientsData || ingredientAnalysis);
+
+    } catch (error) {
+      console.error("Error in ingredients recall:", error);
+      res.status(500).json({ error: "Failed to recall ingredients" });
+    }
+  });
 
   // Composition Analysis (Calories/Nutrition)
   app.post("/api/analyze-composition", async (req, res) => {
@@ -399,7 +478,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Only run analysis if not already done
-      if (analysis.compositionData) {
+      // NOTE: This check is bypassed for recall functionality
+      if (analysis.compositionData && !req.body.forceRefresh) {
         return res.json(analysis.compositionData);
       }
 
@@ -499,6 +579,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to analyze composition" });
     }
   });
+  
+  // New endpoint specifically for recalling composition data (bypasses existing data check)
+  app.post("/api/recall-composition", async (req, res) => {
+    try {
+      const { analysisId } = req.body;
+      
+      if (!analysisId) {
+        return res.status(400).json({ error: "Analysis ID is required" });
+      }
+
+      const analysis = await storage.getProductAnalysis(analysisId);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+
+      // Always run analysis for recall (bypass existing data check)
+      console.log("Forcing refresh of composition data for recall");
+      
+      let composition;
+      
+      if (analysis.isFallbackMode) {
+        // Fallback Path: Use category-specific APIs
+        console.log("Using fallback path for composition analysis");
+        
+        // Determine category from extracted data
+        let productCategory = "General/Unspecified";
+        if (analysis.extractedText.nutrition && analysis.extractedText.nutrition.toLowerCase().includes("calories")) {
+          productCategory = "Food/Consumable";
+        } else if (analysis.productSummary && (analysis.productSummary.toLowerCase().includes("cosmetic") || analysis.productSummary.toLowerCase().includes("beauty"))) {
+          productCategory = "Cosmetic/Topical";
+        }
+        
+        // Use appropriate API based on category
+        if (productCategory === "Food/Consumable") {
+          // Use USDA FDC API
+          try {
+            const usdaData = await searchUSDAFDC(analysis.productName);
+            composition = mapUSDAtoCompositionSchema(usdaData);
+          } catch (error) {
+            console.error("USDA FDC lookup failed:", error);
+            composition = await analyzeCompositionFallback(analysis);
+          }
+        } else if (productCategory === "Cosmetic/Topical") {
+          // For cosmetics, try to get data from Open Beauty Facts
+          try {
+            if (analysis.extractedText.barcode) {
+              const beautyFactsData = await searchOpenBeautyFacts(analysis.extractedText.barcode);
+              if (beautyFactsData) {
+                // Create composition data for cosmetic products
+                composition = {
+                  productCategory: "Cosmetic/Topical",
+                  netQuantity: 0,
+                  unitType: "ml", // Default for cosmetics
+                  calories: 0,
+                  totalFat: 0,
+                  totalProtein: 0,
+                  compositionalDetails: [] as Array<{ key: string; value: string }>
+                };
+                
+                // Add available details from Open Beauty Facts
+                if (beautyFactsData.quantity) {
+                  composition.compositionalDetails.push({
+                    key: "Quantity",
+                    value: beautyFactsData.quantity
+                  });
+                }
+                
+                if (beautyFactsData.ingredients_text) {
+                  composition.compositionalDetails.push({
+                    key: "Ingredients",
+                    value: beautyFactsData.ingredients_text
+                  });
+                }
+                
+                if (beautyFactsData.categories) {
+                  composition.compositionalDetails.push({
+                    key: "Category",
+                    value: beautyFactsData.categories
+                  });
+                }
+              } else {
+                // Fallback to web grounding service
+                composition = await analyzeCompositionFallback(analysis);
+              }
+            } else {
+              // Fallback to web grounding service
+              composition = await analyzeCompositionFallback(analysis);
+            }
+          } catch (error) {
+            console.error("Open Beauty Facts lookup failed:", error);
+            composition = await analyzeCompositionFallback(analysis);
+          }
+        } else {
+          // Use web grounding service for general items
+          composition = await analyzeCompositionFallback(analysis);
+        }
+      } else {
+        // Primary Path: Use Gemini Service
+        console.log("Using primary Gemini service for composition analysis");
+        composition = await analyzeComposition(analysis.productName, analysis.extractedText.brand, analysis.productSummary, analysis.extractedText);
+      }
+      
+      // Update storage with the result
+      const updatedAnalysis = await storage.updateProductAnalysis(analysisId, { 
+        compositionData: composition
+      });
+      
+      res.json(updatedAnalysis?.compositionData || composition);
+
+    } catch (error) {
+      console.error("Error in composition recall:", error);
+      res.status(500).json({ error: "Failed to recall composition" });
+    }
+  });
 
   // Reddit Analysis
   app.post("/api/analyze-reddit", async (req, res) => {
@@ -515,7 +709,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Only run analysis if not already done
-      if (analysis.redditData) {
+      // NOTE: This check is bypassed for recall functionality
+      if (analysis.redditData && !req.body.forceRefresh) {
         return res.json(analysis.redditData);
       }
 
@@ -541,6 +736,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error in reddit analysis:", error);
       res.status(500).json({ error: "Failed to analyze reddit" });
+    }
+  });
+  
+  // New endpoint specifically for recalling reddit data (bypasses existing data check)
+  app.post("/api/recall-reddit", async (req, res) => {
+    try {
+      const { analysisId } = req.body;
+      
+      if (!analysisId) {
+        return res.status(400).json({ error: "Analysis ID is required" });
+      }
+
+      const analysis = await storage.getProductAnalysis(analysisId);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+
+      // Always run analysis for recall (bypass existing data check)
+      console.log("Forcing refresh of reddit data for recall");
+      
+      let reviews;
+      
+      if (analysis.isFallbackMode) {
+        // Fallback Path: Return null as per zero-cost plan
+        console.log("Using fallback path for reddit analysis - returning null");
+        reviews = null;
+      } else {
+        // Primary Path: Use Reddit Service
+        console.log("Using primary reddit service for reddit analysis");
+        reviews = await searchRedditReviews(analysis.productName, analysis.extractedText.brand, analysis.productSummary);
+      }
+      
+      // Update storage with the result
+      const updatedAnalysis = await storage.updateProductAnalysis(analysisId, { 
+        redditData: reviews
+      });
+      
+      res.json(updatedAnalysis?.redditData || reviews);
+
+    } catch (error) {
+      console.error("Error in reddit recall:", error);
+      res.status(500).json({ error: "Failed to recall reddit" });
     }
   });
 

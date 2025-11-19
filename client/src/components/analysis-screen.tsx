@@ -111,78 +111,79 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
     // Set the card as open immediately to show the loading UI
     setOpenCard(cardType);
     
-    // If card hasn't been loaded yet, load its data
-    // Add additional check to prevent multiple calls
-    // Note: For recall functionality, we want to allow reloading even if already loaded
-    if (!loadedCards[cardType] && !loadingCards[cardType]) {
-      try {
-        console.log(`Loading data for ${cardType} card`);
-        // Set loading state immediately when starting to fetch data
-        setLoadingCards(prev => ({
-          ...prev,
-          [cardType]: true
-        }));
+    // Load the card data (this will be the same for initial load and recall)
+    await loadCardData(cardType);
+  };
+  
+  // Shared function for loading card data - used by both initial load and recall
+  const loadCardData = async (cardType: CardType) => {
+    try {
+      console.log(`Loading data for ${cardType} card`);
+      // Set loading state immediately when starting to fetch data
+      setLoadingCards(prev => ({
+        ...prev,
+        [cardType]: true
+      }));
+      
+      let data: any = null;
+      
+      switch (cardType) {
+        case 'ingredients':
+          const ingredientsResponse = await apiRequest('POST', `/api/analyze-ingredients`, { analysisId });
+          data = await ingredientsResponse.json();
+          // Update the main analysis state with the new data
+          setAnalysis(prev => prev ? { ...prev, ingredientsData: data } : null);
+          break;
         
-        let data: any = null;
+        case 'calories':
+          const compositionResponse = await apiRequest('POST', `/api/analyze-composition`, { analysisId });
+          data = await compositionResponse.json();
+          // Update the main analysis state with the new data
+          setAnalysis(prev => prev ? { ...prev, compositionData: data } : null);
+          break;
         
-        switch (cardType) {
-          case 'ingredients':
-            const ingredientsResponse = await apiRequest('POST', `/api/analyze-ingredients`, { analysisId });
-            data = await ingredientsResponse.json();
-            // Update the main analysis state with the new data
-            setAnalysis(prev => prev ? { ...prev, ingredientsData: data } : null);
-            break;
-          
-          case 'calories':
-            const compositionResponse = await apiRequest('POST', `/api/analyze-composition`, { analysisId });
-            data = await compositionResponse.json();
-            // Update the main analysis state with the new data
-            setAnalysis(prev => prev ? { ...prev, compositionData: data } : null);
-            break;
-          
-          case 'reddit':
-            const redditResponse = await apiRequest('POST', `/api/analyze-reddit`, { analysisId });
-            data = await redditResponse.json();
-            // Update the main analysis state with the new data
-            setAnalysis(prev => prev ? { ...prev, redditData: data } : null);
-            break;
-        }
-        
-        // Update card data state
-        setCardData(prev => ({
-          ...prev,
-          [cardType]: data
-        }));
-        
-        // Mark this card as loaded
-        setLoadedCards(prev => ({
-          ...prev,
-          [cardType]: true
-        }));
-        
-        // Store data in session storage
-        sessionStorage.setItem(`${cardType}_data_${analysisId}`, JSON.stringify({
-          data: data,
-          timestamp: Date.now()
-        }));
-      } catch (error) {
-        console.error(`Error loading ${cardType} data:`, error);
-        // Set error state
-        setCardData(prev => ({
-          ...prev,
-          [cardType]: { error: true }
-        }));
-      } finally {
-        // Always set loading to false when done
-        setLoadingCards(prev => ({
-          ...prev,
-          [cardType]: false
-        }));
+        case 'reddit':
+          const redditResponse = await apiRequest('POST', `/api/analyze-reddit`, { analysisId });
+          data = await redditResponse.json();
+          // Update the main analysis state with the new data
+          setAnalysis(prev => prev ? { ...prev, redditData: data } : null);
+          break;
       }
+      
+      // Update card data state
+      setCardData(prev => ({
+        ...prev,
+        [cardType]: data
+      }));
+      
+      // Mark this card as loaded
+      setLoadedCards(prev => ({
+        ...prev,
+        [cardType]: true
+      }));
+      
+      // Store data in session storage
+      sessionStorage.setItem(`${cardType}_data_${analysisId}`, JSON.stringify({
+        data: data,
+        timestamp: Date.now()
+      }));
+    } catch (error) {
+      console.error(`Error loading ${cardType} data:`, error);
+      // Set error state
+      setCardData(prev => ({
+        ...prev,
+        [cardType]: { error: true }
+      }));
+    } finally {
+      // Always set loading to false when done
+      setLoadingCards(prev => ({
+        ...prev,
+        [cardType]: false
+      }));
     }
   };
   
-  // New recall functions for each card type
+  // Special recall function for calories that bypasses existing data check
   const recallCaloriesData = async () => {
     if (!analysisId) return;
     
@@ -197,34 +198,18 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
     try {
       setRecallingCards(prev => ({ ...prev, calories: true }));
       
-      const compositionResponse = await apiRequest('POST', `/api/analyze-composition`, { analysisId });
+      // Use the recall endpoint which bypasses existing data checks
+      const compositionResponse = await apiRequest('POST', `/api/recall-composition`, { analysisId });
       const data = await compositionResponse.json();
       
-      console.log("Received calories data from API:", data ? JSON.stringify(data).substring(0, 100) : null);
-      
-      // Log success only if we have valid data
-      if (data && Object.keys(data).length > 0) {
-        console.log("Calories data recalled successfully");
-      }
-      
-      console.log("Reloading data for calories card");
-      
       // Update the main analysis state with the new data
-      setAnalysis(prev => {
-        const newState = prev ? { ...prev, compositionData: data } : null;
-        console.log("Updated analysis state with new compositionData:", newState);
-        return newState;
-      });
+      setAnalysis(prev => prev ? { ...prev, compositionData: data } : null);
       
-      // Update card data state with a new object reference to force re-render
-      setCardData(prev => {
-        const newState = {
-          ...prev,
-          calories: data ? { ...data, _timestamp: Date.now() } : data // Add timestamp to force new reference
-        };
-        console.log("Updated cardData state with new calories data:", newState);
-        return newState;
-      });
+      // Update card data state
+      setCardData(prev => ({
+        ...prev,
+        calories: data
+      }));
       
       // Store data in session storage
       sessionStorage.setItem(`calories_data_${analysisId}`, JSON.stringify({
@@ -232,34 +217,15 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
         timestamp: Date.now()
       }));
       
-      // Force re-render by temporarily marking card as not loaded
-      console.log("Temporarily marking calories card as not loaded to force re-render");
-      setLoadedCards(prev => ({
-        ...prev,
-        calories: false
-      }));
-      
-      // After a brief delay, mark as loaded to trigger re-render with new data
-      console.log("Setting timeout to mark calories card as loaded again");
-      setTimeout(() => {
-        console.log("Marking calories card as loaded to trigger re-render");
-        setLoadedCards(prev => ({
-          ...prev,
-          calories: true
-        }));
-      }, 50);
+      console.log("Calories data recalled successfully");
     } catch (error) {
       console.error("Error recalling calories data:", error);
-      // Set error state
-      setCardData(prev => ({
-        ...prev,
-        calories: { error: true }
-      }));
     } finally {
       setRecallingCards(prev => ({ ...prev, calories: false }));
     }
   };
   
+  // Special recall function for ingredients that bypasses existing data check
   const recallIngredientsData = async () => {
     if (!analysisId) return;
     
@@ -274,34 +240,18 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
     try {
       setRecallingCards(prev => ({ ...prev, ingredients: true }));
       
-      const ingredientsResponse = await apiRequest('POST', `/api/analyze-ingredients`, { analysisId });
+      // Use the recall endpoint which bypasses existing data checks
+      const ingredientsResponse = await apiRequest('POST', `/api/recall-ingredients`, { analysisId });
       const data = await ingredientsResponse.json();
       
-      console.log("Received ingredients data from API:", data ? JSON.stringify(data).substring(0, 100) : null);
-      
-      // Log success only if we have valid data
-      if (data && Object.keys(data).length > 0) {
-        console.log("Ingredients data recalled successfully");
-      }
-      
-      console.log("Reloading data for ingredients card");
-      
       // Update the main analysis state with the new data
-      setAnalysis(prev => {
-        const newState = prev ? { ...prev, ingredientsData: data } : null;
-        console.log("Updated analysis state with new ingredientsData:", newState);
-        return newState;
-      });
+      setAnalysis(prev => prev ? { ...prev, ingredientsData: data } : null);
       
-      // Update card data state with a new object reference to force re-render
-      setCardData(prev => {
-        const newState = {
-          ...prev,
-          ingredients: data ? { ...data, _timestamp: Date.now() } : data // Add timestamp to force new reference
-        };
-        console.log("Updated cardData state with new ingredients data:", newState);
-        return newState;
-      });
+      // Update card data state
+      setCardData(prev => ({
+        ...prev,
+        ingredients: data
+      }));
       
       // Store data in session storage
       sessionStorage.setItem(`ingredients_data_${analysisId}`, JSON.stringify({
@@ -309,34 +259,15 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
         timestamp: Date.now()
       }));
       
-      // Force re-render by temporarily marking card as not loaded
-      console.log("Temporarily marking ingredients card as not loaded to force re-render");
-      setLoadedCards(prev => ({
-        ...prev,
-        ingredients: false
-      }));
-      
-      // After a brief delay, mark as loaded to trigger re-render with new data
-      console.log("Setting timeout to mark ingredients card as loaded again");
-      setTimeout(() => {
-        console.log("Marking ingredients card as loaded to trigger re-render");
-        setLoadedCards(prev => ({
-          ...prev,
-          ingredients: true
-        }));
-      }, 50);
+      console.log("Ingredients data recalled successfully");
     } catch (error) {
       console.error("Error recalling ingredients data:", error);
-      // Set error state
-      setCardData(prev => ({
-        ...prev,
-        ingredients: { error: true }
-      }));
     } finally {
       setRecallingCards(prev => ({ ...prev, ingredients: false }));
     }
   };
   
+  // Special recall function for reddit that bypasses existing data check
   const recallRedditData = async () => {
     if (!analysisId) return;
     
@@ -351,34 +282,18 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
     try {
       setRecallingCards(prev => ({ ...prev, reddit: true }));
       
-      const redditResponse = await apiRequest('POST', `/api/analyze-reddit`, { analysisId });
+      // Use the recall endpoint which bypasses existing data checks
+      const redditResponse = await apiRequest('POST', `/api/recall-reddit`, { analysisId });
       const data = await redditResponse.json();
       
-      console.log("Received reddit data from API:", data ? JSON.stringify(data).substring(0, 100) : null);
-      
-      // Log success only if we have valid data
-      if (data && Object.keys(data).length > 0) {
-        console.log("Reddit data recalled successfully");
-      }
-      
-      console.log("Reloading data for reddit card");
-      
       // Update the main analysis state with the new data
-      setAnalysis(prev => {
-        const newState = prev ? { ...prev, redditData: data } : null;
-        console.log("Updated analysis state with new redditData:", newState);
-        return newState;
-      });
+      setAnalysis(prev => prev ? { ...prev, redditData: data } : null);
       
-      // Update card data state with a new object reference to force re-render
-      setCardData(prev => {
-        const newState = {
-          ...prev,
-          reddit: data ? { ...data, _timestamp: Date.now() } : data // Add timestamp to force new reference
-        };
-        console.log("Updated cardData state with new reddit data:", newState);
-        return newState;
-      });
+      // Update card data state
+      setCardData(prev => ({
+        ...prev,
+        reddit: data
+      }));
       
       // Store data in session storage
       sessionStorage.setItem(`reddit_data_${analysisId}`, JSON.stringify({
@@ -386,29 +301,9 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
         timestamp: Date.now()
       }));
       
-      // Force re-render by temporarily marking card as not loaded
-      console.log("Temporarily marking reddit card as not loaded to force re-render");
-      setLoadedCards(prev => ({
-        ...prev,
-        reddit: false
-      }));
-      
-      // After a brief delay, mark as loaded to trigger re-render with new data
-      console.log("Setting timeout to mark reddit card as loaded again");
-      setTimeout(() => {
-        console.log("Marking reddit card as loaded to trigger re-render");
-        setLoadedCards(prev => ({
-          ...prev,
-          reddit: true
-        }));
-      }, 50);
+      console.log("Reddit data recalled successfully");
     } catch (error) {
       console.error("Error recalling reddit data:", error);
-      // Set error state
-      setCardData(prev => ({
-        ...prev,
-        reddit: { error: true }
-      }));
     } finally {
       setRecallingCards(prev => ({ ...prev, reddit: false }));
     }

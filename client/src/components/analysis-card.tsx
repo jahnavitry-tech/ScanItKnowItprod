@@ -113,8 +113,6 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
   const [prevData, setPrevData] = useState<any>(null);
   // State to force re-render when data changes
   const [updateKey, setUpdateKey] = useState(0);
-  // State for reload animation
-  const [isReloading, setIsReloading] = useState(false);
 
   // Effect to mark card as loaded when data is present
   // Reset hasLoaded when data changes to allow re-rendering with new data
@@ -129,17 +127,10 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
     // Check if data has actually changed using deep equality
     if (data && !deepEqual(data, prevData)) {
       console.log(`Data changed for ${cardType} card, forcing re-render`);
-      // Trigger reload animation
-      setIsReloading(true);
       setHasLoaded(true);
       setPrevData(data);
       // Force re-render by updating the key
       setUpdateKey(prev => prev + 1);
-      
-      // Remove reload animation after a short delay
-      setTimeout(() => {
-        setIsReloading(false);
-      }, 300);
     } else if (!data && prevData) {
       // Data was cleared, reset states
       setHasLoaded(false);
@@ -156,18 +147,6 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
   
   // Add a key to force re-render when data changes
   const contentKey = `${cardType}-${updateKey}`;
-
-  // Add a helper function to determine if content should be rendered
-  const shouldRenderContent = () => {
-    // Always render if we have data, regardless of hasLoaded state
-    if (data) return true;
-    // Render if it's a QA card (special case)
-    if (cardType === 'qa') return true;
-    // Render if it's loading
-    if (isLoading) return true;
-    // Otherwise, follow the original logic
-    return isExpanded && hasLoaded;
-  };
 
   const renderCardContent = () => {
     // Show loading state when card is expanded and loading prop is true
@@ -269,7 +248,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
       }
 
       return (
-        <div className={`space-y-2 ${isReloading ? 'animate-pulse' : ''}`}>
+        <div className="space-y-2">
           {ingredientsData.ingredients_analysis.map((ingredient, index) => (
             <div 
               key={`${index}-${updateKey}`} 
@@ -346,7 +325,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
       );
 
       return (
-        <div className={`space-y-6 ${isReloading ? 'animate-pulse' : ''}`}>
+        <div className="space-y-6">
           {/* Serving Size */}
           <div className="flex justify-between items-center">
             <span className="text-xs text-muted-foreground">Serving Size:</span>
@@ -489,7 +468,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
       };
 
       return (
-        <div className={`space-y-4 ${isReloading ? 'animate-pulse' : ''}`}>
+        <div className="space-y-4">
           {/* Pros/Cons Grid */}
           <div className="grid grid-cols-2 gap-4">
             {/* Pros */}
@@ -643,7 +622,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
       </button>
       
       {isExpanded && (
-        <div key={contentKey} className={`px-6 pb-6 animate-slide-up relative ${isReloading ? 'opacity-75' : ''}`} data-testid={`content-${cardType}`}>
+        <div key={contentKey} className="px-6 pb-6 animate-slide-up relative" data-testid={`content-${cardType}`}>
           {renderCardContent()}
           {/* Recall button positioned at bottom right corner */}
           {isExpanded && onRecall && cardType !== 'qa' && (
