@@ -1,10 +1,73 @@
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, MessageCircle, Leaf, Flame, Star } from "lucide-react";
+import { ChevronDown, MessageCircle, Leaf, Flame, Star, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Loader2 } from "lucide-react";
 import { ChatInterface } from "./chat-interface";
 import type { CardType, CardData } from "@/types/analysis";
+
+// Helper function for deep equality check
+const deepEqual = (obj1: any, obj2: any): boolean => {
+  // Special case: if both objects have a _timestamp property, ignore it for comparison
+  if (obj1 && obj2 && obj1._timestamp !== undefined && obj2._timestamp !== undefined) {
+    // Create copies without the _timestamp property for comparison
+    const obj1Copy = { ...obj1 };
+    const obj2Copy = { ...obj2 };
+    delete obj1Copy._timestamp;
+    delete obj2Copy._timestamp;
+    return deepEqual(obj1Copy, obj2Copy);
+  }
+  
+  console.log("deepEqual called with:", { 
+    obj1: obj1 ? JSON.stringify(obj1).substring(0, 100) : null,
+    obj2: obj2 ? JSON.stringify(obj2).substring(0, 100) : null
+  });
+  
+  if (obj1 === obj2) {
+    console.log("Objects are strictly equal");
+    return true;
+  }
+  
+  if (obj1 == null || obj2 == null) {
+    console.log("One or both objects are null/undefined");
+    return obj1 === obj2;
+  }
+  
+  if (typeof obj1 !== 'object' || typeof obj2 !== 'object') {
+    console.log("Objects are primitive types");
+    return obj1 === obj2;
+  }
+  
+  if (Array.isArray(obj1) !== Array.isArray(obj2)) {
+    console.log("One is array, other is not");
+    return false;
+  }
+  
+  const keys1 = Object.keys(obj1);
+  const keys2 = Object.keys(obj2);
+  
+  if (keys1.length !== keys2.length) {
+    console.log("Different number of keys");
+    return false;
+  }
+  
+  for (let key of keys1) {
+    // Skip the _timestamp key if it exists
+    if (key === '_timestamp') continue;
+    
+    if (!keys2.includes(key)) {
+      console.log(`Key ${key} missing in second object`);
+      return false;
+    }
+    if (!deepEqual(obj1[key], obj2[key])) {
+      console.log(`Values for key ${key} are different`);
+      return false;
+    }
+  }
+  
+  console.log("Objects are deeply equal");
+  return true;
+};
 
 interface AnalysisCardProps {
   title: string;
@@ -21,6 +84,9 @@ interface AnalysisCardProps {
   analysisId?: string;
   data?: CardData[keyof CardData];
   onDataLoaded?: (type: CardType, data: any) => void;
+  // New props for recall functionality
+  onRecall?: () => void;
+  isRecalling?: boolean;
 }
 
 const AnalysisCard: React.FC<AnalysisCardProps> = ({ 
@@ -36,17 +102,72 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
   productSummary,
   extractedText,
   analysisId,
-  data
+  data,
+  // New props for recall functionality
+  onRecall,
+  isRecalling
 }) => {
   // State for tracking if data has been loaded for this card
   const [hasLoaded, setHasLoaded] = useState(false);
+  // State to track the previous data for comparison
+  const [prevData, setPrevData] = useState<any>(null);
+  // State to force re-render when data changes
+  const [updateKey, setUpdateKey] = useState(0);
+  // State for reload animation
+  const [isReloading, setIsReloading] = useState(false);
 
   // Effect to mark card as loaded when data is present
+  // Reset hasLoaded when data changes to allow re-rendering with new data
   useEffect(() => {
-    if (data && !hasLoaded) {
+    console.log(`AnalysisCard useEffect triggered for ${cardType} card`, { 
+      data: data ? JSON.stringify(data).substring(0, 100) : null,
+      prevData: prevData ? JSON.stringify(prevData).substring(0, 100) : null,
+      hasLoaded,
+      deepEqualResult: data && prevData ? deepEqual(data, prevData) : 'N/A'
+    });
+    
+    // Check if data has actually changed using deep equality
+    if (data && !deepEqual(data, prevData)) {
+      console.log(`Data changed for ${cardType} card, forcing re-render`);
+      // Trigger reload animation
+      setIsReloading(true);
       setHasLoaded(true);
+      setPrevData(data);
+      // Force re-render by updating the key
+      setUpdateKey(prev => prev + 1);
+      
+      // Remove reload animation after a short delay
+      setTimeout(() => {
+        setIsReloading(false);
+      }, 300);
+    } else if (!data && prevData) {
+      // Data was cleared, reset states
+      setHasLoaded(false);
+      setPrevData(null);
+    } else if (data && !hasLoaded) {
+      // Data is present but card wasn't marked as loaded, mark it now
+      console.log(`Initial data loaded for ${cardType} card`);
+      setHasLoaded(true);
+      setPrevData(data);
+    } else if (data && hasLoaded) {
+      console.log(`Data unchanged for ${cardType} card, no re-render needed`);
     }
-  }, [data, hasLoaded]);
+  }, [data, prevData, hasLoaded, cardType]);
+  
+  // Add a key to force re-render when data changes
+  const contentKey = `${cardType}-${updateKey}`;
+
+  // Add a helper function to determine if content should be rendered
+  const shouldRenderContent = () => {
+    // Always render if we have data, regardless of hasLoaded state
+    if (data) return true;
+    // Render if it's a QA card (special case)
+    if (cardType === 'qa') return true;
+    // Render if it's loading
+    if (isLoading) return true;
+    // Otherwise, follow the original logic
+    return isExpanded && hasLoaded;
+  };
 
   const renderCardContent = () => {
     // Show loading state when card is expanded and loading prop is true
@@ -148,10 +269,10 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
       }
 
       return (
-        <div className="space-y-2">
+        <div className={`space-y-2 ${isReloading ? 'animate-pulse' : ''}`}>
           {ingredientsData.ingredients_analysis.map((ingredient, index) => (
             <div 
-              key={index} 
+              key={`${index}-${updateKey}`} 
               className="flex items-center justify-between p-3 rounded-lg bg-secondary"
             >
               <div className="flex-1">
@@ -225,7 +346,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
       );
 
       return (
-        <div className="space-y-6">
+        <div className={`space-y-6 ${isReloading ? 'animate-pulse' : ''}`}>
           {/* Serving Size */}
           <div className="flex justify-between items-center">
             <span className="text-xs text-muted-foreground">Serving Size:</span>
@@ -256,7 +377,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
               <h4 className="font-medium text-base text-foreground">Nutrition Facts</h4>
               <div className="divide-y divide-border">
                 {mainDetails.map((item: any, index: number) => (
-                  <div key={index} className="py-2">
+                  <div key={`${index}-${updateKey}`} className="py-2">
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-medium text-foreground">{item.key}</span>
                       {item.value && item.value.split(' ').length <= 3 ? (
@@ -293,7 +414,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
               <h4 className="font-medium text-base mb-2 text-foreground">Sugar Types</h4>
               <div className="space-y-2">
                 {sugarTypes.map((item: any, index: number) => (
-                  <div key={index}>
+                  <div key={`${index}-${updateKey}`}>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-foreground">{item.key}</span>
                       {item.value && item.value.split(' ').length <= 3 ? (
@@ -315,7 +436,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
               <h4 className="font-medium text-base mb-2 text-foreground">Vitamins & Minerals</h4>
               <div className="space-y-2">
                 {vitamins.map((item: any, index: number) => (
-                  <div key={index}>
+                  <div key={`${index}-${updateKey}`}>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-foreground">{item.key}</span>
                       {item.value && item.value.split(' ').length <= 3 ? (
@@ -368,7 +489,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
       };
 
       return (
-        <div className="space-y-4">
+        <div className={`space-y-4 ${isReloading ? 'animate-pulse' : ''}`}>
           {/* Pros/Cons Grid */}
           <div className="grid grid-cols-2 gap-4">
             {/* Pros */}
@@ -377,7 +498,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
               <ul className="text-xs text-green-600 dark:text-green-300 space-y-1">
                 {redditData.pros && redditData.pros.length > 0 ? (
                   redditData.pros.slice(0, 4).map((pro: string, index: number) => (
-                    <li key={index}>• {pro}</li>
+                    <li key={`${index}-${updateKey}`}>• {pro}</li>
                   ))
                 ) : (
                   <li>No pros found</li>
@@ -391,7 +512,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
               <ul className="text-xs text-red-600 dark:text-red-300 space-y-1">
                 {redditData.cons && redditData.cons.length > 0 ? (
                   redditData.cons.slice(0, 4).map((con: string, index: number) => (
-                    <li key={index}>• {con}</li>
+                    <li key={`${index}-${updateKey}`}>• {con}</li>
                   ))
                 ) : (
                   <li>No cons found</li>
@@ -522,8 +643,29 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
       </button>
       
       {isExpanded && (
-        <div className="px-6 pb-6 animate-slide-up" data-testid={`content-${cardType}`}>
+        <div key={contentKey} className={`px-6 pb-6 animate-slide-up relative ${isReloading ? 'opacity-75' : ''}`} data-testid={`content-${cardType}`}>
           {renderCardContent()}
+          {/* Recall button positioned at bottom right corner */}
+          {isExpanded && onRecall && cardType !== 'qa' && (
+            <div className="absolute bottom-4 right-4">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="rounded-full p-2 h-10 w-10 shadow-md hover:shadow-lg transition-shadow"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRecall();
+                }}
+                disabled={isRecalling}
+              >
+                {isRecalling ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
