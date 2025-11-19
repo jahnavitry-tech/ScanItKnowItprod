@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Camera, Share, Loader2, Flame, Star, Leaf, MessageCircle, MessageSquare } from "lucide-react";
+import { Camera, Share, Loader2, Flame, Star, Leaf, MessageCircle, MessageSquare, RotateCcw } from "lucide-react";
 import { AnalysisCard } from "./analysis-card";
 import type { ProductAnalysis, CardType, CardData, IngredientsData, RedditData, ICompositionAnalysis, IFeaturesData } from "@/types/analysis";
 import { apiRequest } from "@/lib/queryClient";
@@ -42,6 +42,13 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
   });
   // Track which cards are currently loading
   const [loadingCards, setLoadingCards] = useState<Record<CardType, boolean>>({
+    ingredients: false,
+    calories: false,
+    reddit: false,
+    qa: false,
+  });
+  // Track which cards are currently recalling
+  const [recallingCards, setRecallingCards] = useState<Record<CardType, boolean>>({
     ingredients: false,
     calories: false,
     reddit: false,
@@ -105,7 +112,9 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
     setOpenCard(cardType);
     
     // If card hasn't been loaded yet, load its data
-    if (!loadedCards[cardType]) {
+    // Add additional check to prevent multiple calls
+    // Note: For recall functionality, we want to allow reloading even if already loaded
+    if (!loadedCards[cardType] && !loadingCards[cardType]) {
       try {
         console.log(`Loading data for ${cardType} card`);
         // Set loading state immediately when starting to fetch data
@@ -150,6 +159,12 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
           ...prev,
           [cardType]: true
         }));
+        
+        // Store data in session storage
+        sessionStorage.setItem(`${cardType}_data_${analysisId}`, JSON.stringify({
+          data: data,
+          timestamp: Date.now()
+        }));
       } catch (error) {
         console.error(`Error loading ${cardType} data:`, error);
         // Set error state
@@ -164,6 +179,238 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
           [cardType]: false
         }));
       }
+    }
+  };
+  
+  // New recall functions for each card type
+  const recallCaloriesData = async () => {
+    if (!analysisId) return;
+    
+    // Prevent multiple concurrent calls
+    if (recallingCards.calories) {
+      console.log("Calories data recall already in progress, skipping...");
+      return;
+    }
+    
+    console.log("Initiating calories data recall...");
+    
+    try {
+      setRecallingCards(prev => ({ ...prev, calories: true }));
+      
+      const compositionResponse = await apiRequest('POST', `/api/analyze-composition`, { analysisId });
+      const data = await compositionResponse.json();
+      
+      console.log("Received calories data from API:", data ? JSON.stringify(data).substring(0, 100) : null);
+      
+      // Log success only if we have valid data
+      if (data && Object.keys(data).length > 0) {
+        console.log("Calories data recalled successfully");
+      }
+      
+      console.log("Reloading data for calories card");
+      
+      // Update the main analysis state with the new data
+      setAnalysis(prev => {
+        const newState = prev ? { ...prev, compositionData: data } : null;
+        console.log("Updated analysis state with new compositionData:", newState);
+        return newState;
+      });
+      
+      // Update card data state with a new object reference to force re-render
+      setCardData(prev => {
+        const newState = {
+          ...prev,
+          calories: data ? { ...data, _timestamp: Date.now() } : data // Add timestamp to force new reference
+        };
+        console.log("Updated cardData state with new calories data:", newState);
+        return newState;
+      });
+      
+      // Store data in session storage
+      sessionStorage.setItem(`calories_data_${analysisId}`, JSON.stringify({
+        data: data,
+        timestamp: Date.now()
+      }));
+      
+      // Force re-render by temporarily marking card as not loaded
+      console.log("Temporarily marking calories card as not loaded to force re-render");
+      setLoadedCards(prev => ({
+        ...prev,
+        calories: false
+      }));
+      
+      // After a brief delay, mark as loaded to trigger re-render with new data
+      console.log("Setting timeout to mark calories card as loaded again");
+      setTimeout(() => {
+        console.log("Marking calories card as loaded to trigger re-render");
+        setLoadedCards(prev => ({
+          ...prev,
+          calories: true
+        }));
+      }, 50);
+    } catch (error) {
+      console.error("Error recalling calories data:", error);
+      // Set error state
+      setCardData(prev => ({
+        ...prev,
+        calories: { error: true }
+      }));
+    } finally {
+      setRecallingCards(prev => ({ ...prev, calories: false }));
+    }
+  };
+  
+  const recallIngredientsData = async () => {
+    if (!analysisId) return;
+    
+    // Prevent multiple concurrent calls
+    if (recallingCards.ingredients) {
+      console.log("Ingredients data recall already in progress, skipping...");
+      return;
+    }
+    
+    console.log("Initiating ingredients data recall...");
+    
+    try {
+      setRecallingCards(prev => ({ ...prev, ingredients: true }));
+      
+      const ingredientsResponse = await apiRequest('POST', `/api/analyze-ingredients`, { analysisId });
+      const data = await ingredientsResponse.json();
+      
+      console.log("Received ingredients data from API:", data ? JSON.stringify(data).substring(0, 100) : null);
+      
+      // Log success only if we have valid data
+      if (data && Object.keys(data).length > 0) {
+        console.log("Ingredients data recalled successfully");
+      }
+      
+      console.log("Reloading data for ingredients card");
+      
+      // Update the main analysis state with the new data
+      setAnalysis(prev => {
+        const newState = prev ? { ...prev, ingredientsData: data } : null;
+        console.log("Updated analysis state with new ingredientsData:", newState);
+        return newState;
+      });
+      
+      // Update card data state with a new object reference to force re-render
+      setCardData(prev => {
+        const newState = {
+          ...prev,
+          ingredients: data ? { ...data, _timestamp: Date.now() } : data // Add timestamp to force new reference
+        };
+        console.log("Updated cardData state with new ingredients data:", newState);
+        return newState;
+      });
+      
+      // Store data in session storage
+      sessionStorage.setItem(`ingredients_data_${analysisId}`, JSON.stringify({
+        data: data,
+        timestamp: Date.now()
+      }));
+      
+      // Force re-render by temporarily marking card as not loaded
+      console.log("Temporarily marking ingredients card as not loaded to force re-render");
+      setLoadedCards(prev => ({
+        ...prev,
+        ingredients: false
+      }));
+      
+      // After a brief delay, mark as loaded to trigger re-render with new data
+      console.log("Setting timeout to mark ingredients card as loaded again");
+      setTimeout(() => {
+        console.log("Marking ingredients card as loaded to trigger re-render");
+        setLoadedCards(prev => ({
+          ...prev,
+          ingredients: true
+        }));
+      }, 50);
+    } catch (error) {
+      console.error("Error recalling ingredients data:", error);
+      // Set error state
+      setCardData(prev => ({
+        ...prev,
+        ingredients: { error: true }
+      }));
+    } finally {
+      setRecallingCards(prev => ({ ...prev, ingredients: false }));
+    }
+  };
+  
+  const recallRedditData = async () => {
+    if (!analysisId) return;
+    
+    // Prevent multiple concurrent calls
+    if (recallingCards.reddit) {
+      console.log("Reddit data recall already in progress, skipping...");
+      return;
+    }
+    
+    console.log("Initiating reddit data recall...");
+    
+    try {
+      setRecallingCards(prev => ({ ...prev, reddit: true }));
+      
+      const redditResponse = await apiRequest('POST', `/api/analyze-reddit`, { analysisId });
+      const data = await redditResponse.json();
+      
+      console.log("Received reddit data from API:", data ? JSON.stringify(data).substring(0, 100) : null);
+      
+      // Log success only if we have valid data
+      if (data && Object.keys(data).length > 0) {
+        console.log("Reddit data recalled successfully");
+      }
+      
+      console.log("Reloading data for reddit card");
+      
+      // Update the main analysis state with the new data
+      setAnalysis(prev => {
+        const newState = prev ? { ...prev, redditData: data } : null;
+        console.log("Updated analysis state with new redditData:", newState);
+        return newState;
+      });
+      
+      // Update card data state with a new object reference to force re-render
+      setCardData(prev => {
+        const newState = {
+          ...prev,
+          reddit: data ? { ...data, _timestamp: Date.now() } : data // Add timestamp to force new reference
+        };
+        console.log("Updated cardData state with new reddit data:", newState);
+        return newState;
+      });
+      
+      // Store data in session storage
+      sessionStorage.setItem(`reddit_data_${analysisId}`, JSON.stringify({
+        data: data,
+        timestamp: Date.now()
+      }));
+      
+      // Force re-render by temporarily marking card as not loaded
+      console.log("Temporarily marking reddit card as not loaded to force re-render");
+      setLoadedCards(prev => ({
+        ...prev,
+        reddit: false
+      }));
+      
+      // After a brief delay, mark as loaded to trigger re-render with new data
+      console.log("Setting timeout to mark reddit card as loaded again");
+      setTimeout(() => {
+        console.log("Marking reddit card as loaded to trigger re-render");
+        setLoadedCards(prev => ({
+          ...prev,
+          reddit: true
+        }));
+      }, 50);
+    } catch (error) {
+      console.error("Error recalling reddit data:", error);
+      // Set error state
+      setCardData(prev => ({
+        ...prev,
+        reddit: { error: true }
+      }));
+    } finally {
+      setRecallingCards(prev => ({ ...prev, reddit: false }));
     }
   };
   
@@ -412,6 +659,14 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
             productName={analysis?.productName}
             productSummary={analysis?.productSummary}
             isLoading={loadingCards[card.type]}
+            // New props for recall functionality
+            onRecall={
+              card.type === 'calories' ? recallCaloriesData :
+              card.type === 'ingredients' ? recallIngredientsData :
+              card.type === 'reddit' ? recallRedditData :
+              undefined
+            }
+            isRecalling={recallingCards[card.type]}
           />
         ))}
       </div>
@@ -428,49 +683,29 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
         </Button>
         <Dialog open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
           <DialogTrigger asChild>
-            <Button 
-              variant="outline" 
-              size="icon" 
-              data-testid="button-feedback"
-            >
-              <MessageSquare className="h-5 w-5" />
+            <Button variant="outline" className="flex-1">
+              <MessageSquare className="h-4 w-4 mr-2" />
+              Feedback
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px] rounded-lg">
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Send Feedback</DialogTitle>
+              <DialogDescription>
+                Help us improve ScanItKnowIt by sharing your suggestions.
+              </DialogDescription>
+            </DialogHeader>
             <form onSubmit={handleFeedbackSubmit}>
-              <DialogHeader>
-                <DialogTitle className="text-xl font-bold">Help Us Build Your Next Update</DialogTitle>
-                <DialogDescription className="text-sm">
-                  Tell us how we can make your experience better and suggest the next feature you want to see.
-                </DialogDescription>
-              </DialogHeader>
               <div className="grid gap-4 py-4">
                 <Textarea
-                  placeholder="Add feedback"
+                  placeholder="Type your feedback here..."
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
-                  className="min-h-[120px] w-full rounded-lg border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                  className="min-h-[120px]"
                 />
               </div>
-              <DialogFooter className="flex flex-col sm:flex-row sm:justify-end gap-2">
-                <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    setIsFeedbackOpen(false);
-                    setFeedback("");
-                  }}
-                  className="h-12"
-                  type="button"
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  className="h-12"
-                  disabled={!feedback.trim()}
-                  type="submit"
-                >
-                  Submit
-                </Button>
+              <DialogFooter>
+                <Button type="submit">Submit Feedback</Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -478,4 +713,4 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
       </div>
     </div>
   );
-}
+};
