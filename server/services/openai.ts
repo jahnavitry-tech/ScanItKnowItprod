@@ -101,7 +101,7 @@ export async function identifyProductAndExtractText(base64Image: string): Promis
     
     **JSON SCHEMA:**[{"productName": "string", "extractedText": {"ingredients": "string", "nutrition": "string", "brand": "string"}, "summary": "string"}]
     `;
-
+    
     const image = {
       inlineData: {
         data: base64Image,

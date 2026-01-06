@@ -523,6 +523,7 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
             analysisId={analysisId} 
             productName={productName} 
             extractedText={extractedText} 
+            productSummary={productSummary}
           />
         </div>
       );
@@ -622,7 +623,11 @@ const AnalysisCard: React.FC<AnalysisCardProps> = ({
       </button>
       
       {isExpanded && (
-        <div key={contentKey} className="px-6 pb-6 animate-slide-up relative" data-testid={`content-${cardType}`}>
+        <div 
+          key={contentKey} 
+          className={`px-6 animate-slide-up relative ${onRecall && cardType !== 'qa' ? 'pb-16' : 'pb-6'}`}
+          data-testid={`content-${cardType}`}
+        >
           {renderCardContent()}
           {/* Recall button positioned at bottom right corner */}
           {isExpanded && onRecall && cardType !== 'qa' && (

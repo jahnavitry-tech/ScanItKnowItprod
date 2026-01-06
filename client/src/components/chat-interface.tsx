@@ -10,9 +10,10 @@ interface ChatInterfaceProps {
   analysisId: string;
   productName: string;
   extractedText: any;
+  productSummary?: string;
 }
 
-export function ChatInterface({ analysisId }: ChatInterfaceProps) {
+export function ChatInterface({ analysisId, productName, extractedText, productSummary }: ChatInterfaceProps) {
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -23,6 +24,19 @@ export function ChatInterface({ analysisId }: ChatInterfaceProps) {
 
   const sendMessageMutation = useMutation({
     mutationFn: async (message: string) => {
+      // Check if the message is relevant to the product
+      const isRelevant = checkQuestionRelevance(message, productName, extractedText, productSummary);
+      
+      if (!isRelevant) {
+        // Return a template response for irrelevant questions
+        return {
+          message,
+          response: `I'm designed to help you understand this specific product: ${productName}. For questions about this product, I can help with ingredients, nutrition facts, safety information, or brand details. What would you like to know about this product?`,
+          timestamp: new Date()
+        };
+      }
+      
+      // For relevant questions, call the API
       const response = await apiRequest("POST", `/api/chat/${analysisId}`, { message });
       return response.json();
     },
@@ -64,6 +78,64 @@ export function ChatInterface({ analysisId }: ChatInterfaceProps) {
   if (sendMessageMutation.data && !allMessages.some((msg) => msg.message === sendMessageMutation.data.message)) {
     allMessages.push(sendMessageMutation.data);
   }
+
+  // Function to check if a question is relevant to the product
+  const checkQuestionRelevance = (
+    question: string, 
+    productName: string, 
+    extractedText: any, 
+    productSummary?: string
+  ): boolean => {
+    const questionLower = question.toLowerCase();
+    
+    // List of product-related keywords to check against
+    const productKeywords = [
+      productName.toLowerCase(),
+      extractedText?.brand?.toLowerCase() || '',
+      ...(extractedText?.ingredients ? extractedText.ingredients.toLowerCase().split(/[\s,;]+/) : []),
+      ...(productSummary ? productSummary.toLowerCase().split(/[\s,;]+/) : [])
+    ].filter(Boolean);
+    
+    // Common product-related terms
+    const productRelatedTerms = [
+      'ingredient', 'ingredients', 'nutrition', 'calories', 'brand', 'product',
+      'safety', 'allergen', 'allergy', 'diet', 'food', 'cosmetic', 'skincare',
+      'nutrition', 'nutritional', 'composition', 'formula', 'content', 'contents',
+      'ingredient', 'ingredients', 'component', 'components', 'recipe', 'formula'
+    ];
+    
+    // Check if question contains product-specific terms
+    for (const keyword of productKeywords) {
+      if (questionLower.includes(keyword.toLowerCase())) {
+        return true;
+      }
+    }
+    
+    // Check if question contains general product-related terms
+    for (const term of productRelatedTerms) {
+      if (questionLower.includes(term)) {
+        return true;
+      }
+    }
+    
+    // Check for common question patterns related to products
+    const questionPatterns = [
+      /what is/, /tell me about/, /how (safe|good|healthy)/, /is (this|it)/,
+      /contains/, /made of/, /consist of/, /ingredients/, /nutritious/, /calories/, /brand/
+    ];
+    
+    for (const pattern of questionPatterns) {
+      if (pattern.test(questionLower)) {
+        // If the question pattern is followed by product-related context
+        if (productKeywords.some(keyword => questionLower.includes(keyword))) {
+          return true;
+        }
+      }
+    }
+    
+    // If none of the above conditions match, consider it irrelevant
+    return false;
+  };
 
   return (
     <div className="chat-interface space-y-4" data-testid="chat-interface">

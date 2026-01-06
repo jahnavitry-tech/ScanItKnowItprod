@@ -33,6 +33,15 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
   const [loading, setLoading] = useState(true);
   const [openCard, setOpenCard] = useState<CardType | null>(null);
   const [cardData, setCardData] = useState<CardData>({});
+  // NEW: State for background pre-loaded data
+  const [preloadedData, setPreloadedData] = useState<CardData>({});
+  // NEW: Track background loading status
+  const [preloadStatus, setPreloadStatus] = useState<Record<CardType, boolean>>({
+    ingredients: false,
+    calories: false,
+    reddit: false,
+    qa: false,
+  });
   // Track which cards have been loaded to prevent duplicate API calls
   const [loadedCards, setLoadedCards] = useState<Record<CardType, boolean>>({
     ingredients: false,
@@ -96,8 +105,80 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
       }
     };
 
+    // NEW: Background pre-loading function
+    const preloadAllAnalysisData = async () => {
+      if (!analysisId) return;
+      
+      console.log("Starting background pre-loading for analysisId:", analysisId);
+      
+      // Run all three API calls in parallel
+      const preloadPromises = [
+        preloadCardData('ingredients'),
+        preloadCardData('calories'),
+        preloadCardData('reddit')
+      ];
+      
+      // Execute all promises concurrently
+      await Promise.allSettled(preloadPromises);
+      console.log("Background pre-loading completed");
+    };
+    
+    // NEW: Function to pre-load individual card data
+    const preloadCardData = async (cardType: CardType) => {
+      try {
+        console.log(`Pre-loading data for ${cardType} card`);
+        setPreloadStatus(prev => ({ ...prev, [cardType]: true }));
+        
+        let data: any = null;
+        
+        switch (cardType) {
+          case 'ingredients':
+            const ingredientsResponse = await apiRequest('POST', `/api/analyze-ingredients`, { analysisId });
+            data = await ingredientsResponse.json();
+            break;
+          
+          case 'calories':
+            const compositionResponse = await apiRequest('POST', `/api/analyze-composition`, { analysisId });
+            data = await compositionResponse.json();
+            break;
+          
+          case 'reddit':
+            const redditResponse = await apiRequest('POST', `/api/analyze-reddit`, { analysisId });
+            data = await redditResponse.json();
+            break;
+        }
+        
+        // Store pre-loaded data
+        setPreloadedData(prev => ({
+          ...prev,
+          [cardType]: data
+        }));
+        
+        // Also store in session storage for persistence
+        sessionStorage.setItem(`preloaded_${cardType}_data_${analysisId}`, JSON.stringify({
+          data: data,
+          timestamp: Date.now()
+        }));
+        
+        console.log(`Successfully pre-loaded ${cardType} data`);
+        
+      } catch (error) {
+        console.error(`Error pre-loading ${cardType} data:`, error);
+        // Store error state
+        setPreloadedData(prev => ({
+          ...prev,
+          [cardType]: { error: true }
+        }));
+      } finally {
+        setPreloadStatus(prev => ({ ...prev, [cardType]: false }));
+      }
+    };
+
     if (analysisId) {
-      loadInitialAnalysis();
+      loadInitialAnalysis().then(() => {
+        // Start background pre-loading AFTER basic data is loaded and displayed
+        preloadAllAnalysisData();
+      });
     }
   }, [analysisId]);
 
@@ -110,6 +191,33 @@ export function AnalysisScreen({ analysisId, onScanAnother }: AnalysisScreenProp
     
     // Set the card as open immediately to show the loading UI
     setOpenCard(cardType);
+    
+    // NEW: Check if data is already pre-loaded
+    if (preloadedData[cardType]) {
+      console.log(`Using pre-loaded data for ${cardType} card`);
+      // Use pre-loaded data immediately
+      setCardData(prev => ({
+        ...prev,
+        [cardType]: preloadedData[cardType]
+      }));
+      
+      // Update main analysis state
+      switch (cardType) {
+        case 'ingredients':
+          setAnalysis(prev => prev ? { ...prev, ingredientsData: preloadedData[cardType] } : null);
+          break;
+        case 'calories':
+          setAnalysis(prev => prev ? { ...prev, compositionData: preloadedData[cardType] } : null);
+          break;
+        case 'reddit':
+          setAnalysis(prev => prev ? { ...prev, redditData: preloadedData[cardType] } : null);
+          break;
+      }
+      
+      // Mark as loaded
+      setLoadedCards(prev => ({ ...prev, [cardType]: true }));
+      return;
+    }
     
     // Load the card data (this will be the same for initial load and recall)
     await loadCardData(cardType);
