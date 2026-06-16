@@ -1,43 +1,50 @@
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import { registerRoutes, IMG_DIR } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import dotenv from "dotenv";
+import { logger } from "./logger";
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
-// THE FIX: Increase payload limits for image base64 strings
+
+// Serve saved product images. Must be registered before registerRoutes so the
+// static handler takes priority over the Vite catch-all in development.
+app.use("/api/images", express.static(IMG_DIR, { maxAge: "1d", etag: true }));
+
+// Increase payload limits for image base64 strings
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Log environment variables for debugging
-console.log("GEMINI_API_KEY present:", !!process.env.GEMINI_API_KEY);
-console.log("HUGGINGFACE_API_KEY present:", !!process.env.HUGGINGFACE_API_KEY);
+logger.info("=".repeat(60));
+logger.info("Server starting — NODE_ENV:", process.env.NODE_ENV);
+logger.info("GEMINI_API_KEY present:      ", !!process.env.GEMINI_API_KEY);
+logger.info("HUGGINGFACE_API_KEY present: ", !!process.env.HUGGINGFACE_API_KEY);
+logger.info("OCR_API_KEY present:         ", !!process.env.OCR_API_KEY);
+logger.info("USDA_API_KEY present:        ", !!process.env.USDA_API_KEY);
+logger.info("Log file →", logger.filePath());
+logger.info("=".repeat(60));
 
 app.use((req, res, next) => {
   const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  const reqPath = req.path;
+  let capturedBody: Record<string, any> | undefined;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
+    capturedBody = bodyJson;
     return originalResJson.apply(res, [bodyJson, ...args]);
   };
 
   res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
+    const ms = Date.now() - start;
+    if (reqPath.startsWith("/api")) {
+      logger.api(req.method, reqPath, res.statusCode, ms,
+        res.statusCode >= 400 ? capturedBody : undefined);
+      // Also keep the original short Vite log for the console
+      let logLine = `${req.method} ${reqPath} ${res.statusCode} in ${ms}ms`;
+      if (logLine.length > 80) logLine = logLine.slice(0, 79) + "…";
       log(logLine);
     }
   });
@@ -48,12 +55,11 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+    const status  = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
-
+    logger.error(`Unhandled error on ${req.method} ${req.path}:`, message, err.stack ?? "");
     res.status(status).json({ message });
-    throw err;
   });
 
   // importantly only setup vite in development and after

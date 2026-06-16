@@ -1,5 +1,5 @@
 // OCR.Space API configuration
-const OCR_API_KEY = process.env.OCR_API_KEY || 'K82830498088957';
+const OCR_API_KEY = process.env.OCR_API_KEY;
 const OCR_API_URL = 'https://api.ocr.space/parse/image';
 
 /**
@@ -48,18 +48,19 @@ export function validateBarcodeChecksum(barcode: string): boolean {
 export async function extractTextWithOCR(base64Image: string): Promise<any> {
   try {
     console.log("Using OCR fallback for image analysis");
-    
+
+    // OCR.space requires form-encoded body (not JSON) and a full data URI prefix.
+    const form = new URLSearchParams();
+    form.append("base64Image", `data:image/jpeg;base64,${base64Image}`);
+    form.append("apikey", OCR_API_KEY || "helloworld");
+    form.append("language", "eng");
+    form.append("isOverlayRequired", "true");
+    form.append("OCREngine", "2");  // engine 2 handles dense/small text better
+
     const response = await fetch(OCR_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        base64Image: base64Image,
-        apikey: OCR_API_KEY,
-        language: 'eng',
-        isOverlayRequired: true // Get coordinate data
-      })
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: form.toString(),
     });
 
     if (!response.ok) {
@@ -211,6 +212,146 @@ export function extractFromOpenFoodFacts(productData: any): any {
       fat: productData.nutriments?.fat_value || 0,
       protein: productData.nutriments?.proteins_value || 0
     }
+  };
+}
+
+// FDA daily reference values (2000 kcal diet, adults 4+ years).
+// Used to compute dailyValuePct for each nutrient.
+const FDA_DV: Record<string, number> = {
+  "Total Fat":           78,    // g
+  "Saturated Fat":       20,    // g
+  "Cholesterol":         300,   // mg
+  "Sodium":              2300,  // mg
+  "Total Carbohydrate":  275,   // g
+  "Dietary Fiber":       28,    // g
+  "Added Sugars":        50,    // g
+  "Protein":             50,    // g
+  "Vitamin D":           20,    // mcg
+  "Calcium":             1300,  // mg
+  "Iron":                18,    // mg
+  "Potassium":           4700,  // mg
+  "Vitamin C":           90,    // mg
+  "Vitamin A":           900,   // mcg
+};
+
+type NutrientCategory = 'macronutrients' | 'sugars' | 'vitamins' | 'minerals' | 'keyComponents' | 'warnings' | 'other';
+
+interface NutrientMapEntry {
+  ofKey: string;
+  label: string;
+  unit: string;
+  category: NutrientCategory;
+  // Some OFacts values need unit conversion before display
+  multiplier?: number;
+}
+
+// Maps OFacts nutriments keys to our display schema.
+// For each entry we prefer nutriments[ofKey + "_serving"], then "_100g", then bare key.
+const OFACTS_NUTRIENT_MAP: NutrientMapEntry[] = [
+  { ofKey: "energy-kcal",    label: "Calories",           unit: "kcal", category: "macronutrients" },
+  { ofKey: "fat",            label: "Total Fat",          unit: "g",    category: "macronutrients" },
+  { ofKey: "saturated-fat",  label: "Saturated Fat",      unit: "g",    category: "macronutrients" },
+  { ofKey: "trans-fat",      label: "Trans Fat",          unit: "g",    category: "macronutrients" },
+  { ofKey: "cholesterol",    label: "Cholesterol",        unit: "mg",   category: "macronutrients", multiplier: 1000 },
+  { ofKey: "carbohydrates",  label: "Total Carbohydrate", unit: "g",    category: "macronutrients" },
+  { ofKey: "fiber",          label: "Dietary Fiber",      unit: "g",    category: "macronutrients" },
+  { ofKey: "sugars",         label: "Total Sugars",       unit: "g",    category: "sugars"         },
+  { ofKey: "added-sugars",   label: "Added Sugars",       unit: "g",    category: "sugars"         },
+  { ofKey: "proteins",       label: "Protein",            unit: "g",    category: "macronutrients" },
+  // OFacts stores sodium in g; multiply × 1000 to get mg
+  { ofKey: "sodium",         label: "Sodium",             unit: "mg",   category: "macronutrients", multiplier: 1000 },
+  { ofKey: "potassium",      label: "Potassium",          unit: "mg",   category: "minerals",       multiplier: 1000 },
+  { ofKey: "calcium",        label: "Calcium",            unit: "mg",   category: "minerals",       multiplier: 1000 },
+  { ofKey: "iron",           label: "Iron",               unit: "mg",   category: "minerals",       multiplier: 1000 },
+  { ofKey: "vitamin-d",      label: "Vitamin D",          unit: "mcg",  category: "vitamins"        },
+  { ofKey: "vitamin-c",      label: "Vitamin C",          unit: "mg",   category: "vitamins"        },
+  { ofKey: "vitamin-a",      label: "Vitamin A",          unit: "mcg",  category: "vitamins"        },
+];
+
+/**
+ * Map a full Open Food Facts product object to ICompositionAnalysis.
+ * Prefers per-serving values over per-100g. Includes %DV where FDA reference exists.
+ */
+export function mapOFactsToCompositionSchema(product: any): any {
+  const n = product.nutriments ?? {};
+
+  // Resolve a nutrient value: prefer _serving, then _100g, then bare key.
+  const resolve = (key: string): number | null => {
+    const serving = n[key + "_serving"];
+    if (serving != null && serving !== "") return Number(serving);
+    const per100 = n[key + "_100g"];
+    if (per100 != null && per100 !== "") return Number(per100);
+    const base = n[key];
+    if (base != null && base !== "") return Number(base);
+    return null;
+  };
+
+  const details: Array<{
+    key: string; value: string; unit: string;
+    category: NutrientCategory;
+    dailyValuePct?: number;
+  }> = [];
+
+  let calories = 0;
+  let totalFat = 0;
+  let totalProtein = 0;
+  let totalCarbs: number | null = null;
+
+  for (const entry of OFACTS_NUTRIENT_MAP) {
+    let raw = resolve(entry.ofKey);
+    if (raw === null || isNaN(raw)) continue;
+
+    // Apply unit multiplier (e.g. g → mg for sodium/minerals)
+    const numericValue = entry.multiplier ? raw * entry.multiplier : raw;
+
+    // Populate top-level macro shortcuts
+    if (entry.label === "Calories")          calories     = Math.round(numericValue);
+    if (entry.label === "Total Fat")         totalFat     = Math.round(numericValue * 10) / 10;
+    if (entry.label === "Protein")           totalProtein = Math.round(numericValue * 10) / 10;
+    if (entry.label === "Total Carbohydrate") totalCarbs  = Math.round(numericValue * 10) / 10;
+
+    // Numeric string only — unit stored separately
+    const displayValue = Number.isInteger(numericValue)
+      ? `${numericValue}`
+      : `${Math.round(numericValue * 10) / 10}`;
+
+    // Compute %DV
+    const dv = FDA_DV[entry.label];
+    const dailyValuePct = dv ? Math.round((numericValue / dv) * 100) : undefined;
+
+    details.push({
+      key: entry.label,
+      value: displayValue,
+      unit: entry.unit,
+      category: entry.category,
+      dailyValuePct,
+    });
+  }
+
+  // Parse quantity string, e.g. "500g" → { netQuantity: 500, unitType: "g" }
+  let netQuantity = 0;
+  let unitType = "g";
+  const qtyStr = product.quantity ?? "";
+  const qtyMatch = qtyStr.match(/^([\d.]+)\s*([a-zA-Z]+)/);
+  if (qtyMatch) {
+    netQuantity = parseFloat(qtyMatch[1]);
+    unitType = qtyMatch[2].toLowerCase();
+  }
+
+  return {
+    productCategory: product.categories_tags?.[0]?.replace(/^en:/, "") ?? product.product_name ?? "Food",
+    netQuantity,
+    unitType,
+    calories,
+    totalFat,
+    totalProtein,
+    totalCarbs,
+    compositionalDetails: details,
+    productType: "food" as const,
+    servingSize: product.serving_size ?? undefined,
+    servingsPerContainer: product.serving_quantity ? Number(product.serving_quantity) : undefined,
+    // Source tag so the card can show "Data from Open Food Facts"
+    dataSource: "openfoodfacts",
   };
 }
 

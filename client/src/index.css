@@ -9,8 +9,8 @@
   --card-foreground: hsl(222.2 84% 4.9%);
   --popover: hsl(0 0% 100%);
   --popover-foreground: hsl(222.2 84% 4.9%);
-  --primary: hsl(221.2 83.2% 53.3%);
-  --primary-foreground: hsl(210 40% 98%);
+  --primary: #2d3a8c;
+  --primary-foreground: #ffffff;
   --secondary: hsl(210 40% 96%);
   --secondary-foreground: hsl(222.2 84% 4.9%);
   --muted: hsl(210 40% 96%);
@@ -21,7 +21,7 @@
   --destructive-foreground: hsl(210 40% 98%);
   --border: hsl(214.3 31.8% 91.4%);
   --input: hsl(214.3 31.8% 91.4%);
-  --ring: hsl(221.2 83.2% 53.3%);
+  --ring: #2d3a8c;
   --chart-1: hsl(203.8863 88.2845% 53.1373%);
   --chart-2: hsl(159.7826 100% 36.0784%);
   --chart-3: hsl(42.0290 92.8251% 56.2745%);
@@ -47,8 +47,55 @@
   --shadow-lg: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 4px 6px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
   --shadow-xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 8px 10px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
   --shadow-2xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --font-headline: Manrope, system-ui, sans-serif;
   --tracking-normal: 0em;
   --spacing: 0.25rem;
+
+  /* ── Design System: MD3 surface palette (camera / always-dark screens) ── */
+  --md-surface: #0e0e0e;
+  --md-surface-container: #191a1a;
+  --md-surface-container-low: #131313;
+  --md-surface-container-high: #1f2020;
+  --md-surface-container-highest: #262626;
+  --md-surface-bright: #2c2c2c;
+  --md-surface-dim: #0e0e0e;
+  --md-on-surface: #ffffff;
+  --md-on-surface-variant: #adaaaa;
+  --md-outline: #767575;
+  --md-outline-variant: #484848;
+  --md-primary: #94aaff;
+  --md-primary-dim: #3e6af1;
+  --md-secondary: #d674ff;
+  --md-tertiary: #aaffdc;
+  --md-tertiary-fixed: #00fdc1;
+  --md-error: #ff6e84;
+
+  /* ── Brand palette ── */
+  --teal: #2a8c78;
+  --teal-light: #3db99a;
+  --error: #ff6e84;
+
+  /* ── Design System: Scanner accent (same in both modes) ── */
+  --scanner-accent: 228 100% 79%;   /* #94aaff */
+  --scanner-accent-hex: #94aaff;
+
+  /* ── Design System: Product highlight colors (fixed — same in both modes) ── */
+  --highlight-green: #B2F746;
+  --highlight-green-text: #1a3a00;
+  --highlight-blue: #4466FA;
+  --highlight-blue-text: #ffffff;
+  --highlight-pink: #FF86C3;
+  --highlight-pink-text: #4A002F;
+  --queue-glow: #98A9FF;
+
+  /* ── Design System: Sheet / bottom-panel surface (light defaults) ── */
+  --sheet-bg: 0 0% 99%;
+  --sheet-border: 214.3 31.8% 91.4%;
+  --sheet-text: 222.2 84% 4.9%;
+  --sheet-text-muted: 215.4 16.3% 46.9%;
+  --sheet-card-bg: 0 0% 100%;
+  --sheet-card-selected: 230 100% 64% / 0.09;
+  --sheet-card-border-selected: 230 100% 64% / 0.45;
 }
 
 .dark {
@@ -58,8 +105,8 @@
   --card-foreground: hsl(210 40% 98%);
   --popover: hsl(222.2 84% 4.9%);
   --popover-foreground: hsl(210 40% 98%);
-  --primary: hsl(217.2 91.2% 59.8%);
-  --primary-foreground: hsl(222.2 84% 4.9%);
+  --primary: #6b84f7;
+  --primary-foreground: #ffffff;
   --secondary: hsl(217.2 32.6% 17.5%);
   --secondary-foreground: hsl(210 40% 98%);
   --muted: hsl(217.2 32.6% 17.5%);
@@ -96,6 +143,24 @@
   --shadow-lg: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 4px 6px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
   --shadow-xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 8px 10px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
   --shadow-2xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
+
+  /* ── Design System: Product highlight colors — same values in dark ── */
+  --highlight-green: #B2F746;
+  --highlight-green-text: #1a3a00;
+  --highlight-blue: #4466FA;
+  --highlight-blue-text: #ffffff;
+  --highlight-pink: #FF86C3;
+  --highlight-pink-text: #4A002F;
+  --queue-glow: #98A9FF;
+
+  /* ── Design System: Sheet surface (dark overrides) ── */
+  --sheet-bg: 225 34% 11%;
+  --sheet-border: 0 0% 100% / 0.10;
+  --sheet-text: 0 0% 97%;
+  --sheet-text-muted: 0 0% 100% / 0.50;
+  --sheet-card-bg: 0 0% 100% / 0.05;
+  --sheet-card-selected: 230 100% 64% / 0.15;
+  --sheet-card-border-selected: 230 100% 64% / 0.55;
 }
 
 @layer base {
@@ -109,6 +174,35 @@
 }
 
 @layer utilities {
+  .animate-scan-line {
+    animation: scanLine 2s ease-in-out infinite;
+  }
+
+  .chip-green {
+    background-color: var(--highlight-green);
+    color: var(--highlight-green-text);
+  }
+  .chip-blue {
+    background-color: var(--highlight-blue);
+    color: var(--highlight-blue-text);
+  }
+  .chip-pink {
+    background-color: var(--highlight-pink);
+    color: var(--highlight-pink-text);
+  }
+  .animate-scan-pulse {
+    animation: scanPulse 1.8s ease-out infinite;
+  }
+  .animate-label-in {
+    animation: labelFadeIn 250ms ease-out forwards;
+  }
+  .animate-border-glow {
+    animation: borderGlow 1.5s ease-in-out infinite;
+  }
+  .animate-sheet-up {
+    animation: sheetSlideUp 320ms ease-out forwards;
+  }
+
   .animate-fade-in {
     animation: fadeIn 0.3s ease-in-out;
   }
@@ -121,9 +215,32 @@
     animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 
+  .animate-step-pulse {
+    animation: stepPulse 1s ease-in-out infinite;
+  }
+
+  .animate-spin-slow {
+    animation: spinSlow 2s linear infinite;
+  }
+
   .scale-102 {
     transform: scale(1.02);
   }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes scanLine {
+  0%   { top: 4px; opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: 212px; opacity: 0; }
 }
 
 @keyframes fadeIn {
@@ -137,15 +254,38 @@
 }
 
 @keyframes slideUp {
-  from {
-    transform: translateY(10px);
-    opacity: 0;
-  }
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
 
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+@keyframes scanPulse {
+  0%, 100% { transform: scale(0.95); opacity: 0.6; }
+  50%       { transform: scale(1.02); opacity: 1; }
+}
+
+@keyframes stepPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes labelFadeIn {
+  0%   { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1);    }
+}
+
+@keyframes borderGlow {
+  0%, 100% { border-color: hsl(var(--scanner-accent) / 0.45); }
+  50%       { border-color: hsl(var(--scanner-accent) / 1.0);  }
+}
+
+@keyframes sheetSlideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0);    }
 }
 
 .camera-viewfinder {
@@ -159,3 +299,172 @@
 .analysis-card.expanded {
   transform: scale(1.02);
 }
+
+/* ── Nutrition highlights: equal 3-column box layout, no overflow ── */
+.nutr-highlights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding-top: 4px;
+  margin-bottom: 8px;
+}
+.nh-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,0.05);
+  overflow: hidden;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.dark .nh-card {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.08);
+}
+.nh-val {
+  line-height: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-align: center;
+}
+.nh-lbl {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  text-align: center;
+}
+
+/* ── Nutrient row: flex — name left | bar middle | value right ── */
+.nutr-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  min-width: 0;
+}
+.dark .nutr-row { border-color: rgba(255,255,255,0.05); }
+.nutr-row:last-child { border-bottom: none; }
+.nr-name {
+  flex: 1;
+  min-width: 0;
+  max-width: 55%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.nr-bar {
+  flex-shrink: 0;
+  width: 44px;
+  height: 5px;
+  background: #f3f4f6;
+  border-radius: 9999px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.nr-val {
+  flex-shrink: 0;
+  text-align: right;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-width: 38%;
+}
+
+/* ── TASK 3: WHW value 3-line clamp ── */
+.whw-val {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.3;
+  word-break: break-word;
+}
+.whw-cell {
+  vertical-align: top;
+  align-items: flex-start;
+  min-height: 56px;
+}
+
+/* ── TASK 5: Badge row max 2 rows ── */
+.cat-badges {
+  max-height: 68px;
+  overflow: hidden;
+}
+.cat-badge {
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── TASK 6: Nutrition filter pills ── */
+.nutr-filter-row {
+  display: flex;
+  gap: 5px;
+  margin: 8px 0 4px;
+  overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.nutr-filter-row::-webkit-scrollbar { display: none; }
+.nf-pill {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(0,0,0,0.08);
+  background: #f8fafc;
+  color: #64748b;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.nf-pill.active { background: #1e2d6b; color: #fff; border-color: #1e2d6b; }
+.dark .nf-pill { background: rgba(255,255,255,0.06); color: #94a3b8; border-color: rgba(255,255,255,0.1); }
+.dark .nf-pill.active { background: #2d3a8c; color: #fff; border-color: #2d3a8c; }
+.nutr-empty { font-size: 10px; color: #94a3b8; text-align: center; padding: 12px 0; }
+
+/* ── TASK 9: Chat typing indicator ── */
+.typing-bubble { display: flex; align-items: center; gap: 3px; padding: 9px 12px; min-width: 48px; }
+.typing-dot {
+  width: 6px; height: 6px; background: #9ca3af; border-radius: 50%;
+  display: inline-block;
+  animation: typingPulse 1.2s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typingPulse {
+  0%,60%,100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+.chat-msgs { max-height: 280px; overflow-y: auto; scroll-behavior: smooth; }
+.chat-msgs::-webkit-scrollbar { width: 0; display: none; }
+.chat-empty { padding: 12px 0 8px; text-align: center; }
+.chat-empty-hint { font-size: 10px; color: #94a3b8; margin-bottom: 8px; font-family: Inter, sans-serif; }
+.chat-suggestions { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+.chat-sug {
+  font-size: 9px; font-weight: 600; padding: 4px 9px; border-radius: 20px;
+  border: 1px solid rgba(0,0,0,0.1); background: #f8fafc; color: #475569; cursor: pointer;
+  font-family: Inter, sans-serif;
+}
+.chat-sug:hover { background: #eef0ff; color: #2d3a8c; border-color: rgba(45,58,140,0.2); }
+
+/* ── TASK 12: Fade-in data appear animation ── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.data-appear { animation: fadeInUp 280ms cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* ── TASK 15: Focus-visible outline ── */
+:focus-visible { outline: 2px solid #2d3a8c; outline-offset: 2px; border-radius: 6px; }

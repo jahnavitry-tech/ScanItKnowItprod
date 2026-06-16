@@ -23,6 +23,8 @@ export interface ProductAnalysis {
   id: string;
   productName: string;
   productSummary: string; // Renamed from summary to productSummary for clarity in this file
+  productCategory?: string;  // from ARA — e.g. "Granola Bar", "Face Moisturizer"
+  productContext?: { what: string; who: string; when: string };  // from ARA — immediate what/who/how
   extractedText: any;
   imageUrl: string | null;
   featuresData: any | null; // NEW FIELD
@@ -30,19 +32,23 @@ export interface ProductAnalysis {
   compositionData: any | null;
   redditData: any | null;
   createdAt: Date;
-  isFallbackMode: boolean; // Add fallback mode flag
+  isFallbackMode: boolean;
+  isGeneralScene: boolean;  // true when brand = "Not applicable" — non-branded real-world scene
 }
 
 export interface InsertProductAnalysis {
   productName: string;
   productSummary: string;
+  productCategory?: string;
+  productContext?: { what: string; who: string; when: string };
   extractedText: any;
   imageUrl?: string | null;
-  featuresData?: any | null; // NEW FIELD
+  featuresData?: any | null;
   ingredientsData?: any | null;
   compositionData?: any | null;
   redditData?: any | null;
-  isFallbackMode?: boolean; // Add fallback mode flag
+  isFallbackMode?: boolean;
+  isGeneralScene?: boolean;
 }
 
 export interface ChatMessage {
@@ -102,16 +108,24 @@ export class MemStorage implements IStorage {
 
   async createProductAnalysis(analysis: InsertProductAnalysis): Promise<ProductAnalysis> {
     const id = generateUUID();
+
+    // Yield the event loop before a potentially large allocation so concurrent
+    // requests are not starved. Base64 strings (fallback path) can be 2 MB+.
+    if ((analysis.imageUrl?.length ?? 0) > 1000) {
+      await new Promise<void>(resolve => setImmediate(resolve));
+    }
+
     const productAnalysis: ProductAnalysis = {
       ...analysis,
       id,
       createdAt: new Date(),
       imageUrl: analysis.imageUrl || null,
-      featuresData: analysis.featuresData || null, // Initialize new field
+      featuresData: analysis.featuresData || null,
       ingredientsData: analysis.ingredientsData || null,
       compositionData: analysis.compositionData || null,
       redditData: analysis.redditData || null,
-      isFallbackMode: analysis.isFallbackMode || false, // Initialize fallback mode flag
+      isFallbackMode: analysis.isFallbackMode || false,
+      isGeneralScene: analysis.isGeneralScene || false,
     };
     this.productAnalyses.set(id, productAnalysis);
     return productAnalysis;

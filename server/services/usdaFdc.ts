@@ -1,5 +1,5 @@
 // USDA FoodData Central API configuration
-const USDA_API_KEY = process.env.USDA_API_KEY || 'wVi6AtDBX0R0Ij0VySFV4mkHb43ZGQ0rhi4D1Xu1';
+const USDA_API_KEY = process.env.USDA_API_KEY;
 const USDA_API_URL = 'https://api.nal.usda.gov/fdc/v1';
 
 /**

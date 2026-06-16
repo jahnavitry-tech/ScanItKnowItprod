@@ -4,6 +4,7 @@ export function useCamera() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
+  const [isBarcodeMode, setIsBarcodeMode] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -138,6 +139,9 @@ export function useCamera() {
     });
   }, [isStreaming]);
 
+  const startBarcodeMode = useCallback(() => setIsBarcodeMode(true), []);
+  const stopBarcodeMode  = useCallback(() => setIsBarcodeMode(false), []);
+
   return {
     videoRef,
     isStreaming,
@@ -146,6 +150,9 @@ export function useCamera() {
     startCamera,
     stopCamera,
     switchCamera,
-    capturePhoto
+    capturePhoto,
+    isBarcodeMode,
+    startBarcodeMode,
+    stopBarcodeMode,
   };
 }

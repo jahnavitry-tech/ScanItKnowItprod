@@ -1,23 +1,21 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { writeFileSync, mkdirSync, existsSync } from "fs";
+import { join } from "path";
 import { storage } from "./storage";
-import { identifyProductAndExtractText, analyzeIngredients, analyzeComposition, analyzeFeatures, generateChatResponse } from "./services/openai";
+import { identifyProductAndExtractText, analyzeIngredients, analyzeComposition, generateChatResponse } from "./services/openai";
+import { scanProductWithGroqVision, analyzeCompositionGroq, analyzeIngredientsGroq, searchRedditReviewsGroq, generateChatResponseGroq, checkGroqCooldown } from "./services/groq";
 import { searchRedditReviews } from "./services/reddit";
-import { analyzeIngredientsFallback, analyzeCompositionFallback, analyzeRedditFallback } from "./services/fallbackGrounding";
-import { extractTextWithOCR, extractProductInfoFromOCR, searchOpenFoodFacts, searchOpenBeautyFacts, extractFromOpenFoodFacts, extractFromOpenBeautyFacts, extractGeneralItemInfo } from "./services/ocrFallback";
+import { analyzeIngredientsFallback, analyzeCompositionFallback } from "./services/fallbackGrounding";
+import { extractTextWithOCR, extractProductInfoFromOCR, searchOpenFoodFacts, searchOpenBeautyFacts, extractFromOpenFoodFacts, extractFromOpenBeautyFacts, extractGeneralItemInfo, mapOFactsToCompositionSchema } from "./services/ocrFallback";
 import { searchUSDAFDC, mapUSDAtoCompositionSchema } from "./services/usdaFdc";
 import multer from "multer";
 
-// --- TYPE HINT FOR SELECTED PRODUCT ---
-interface SelectedProductData {
-  productName: string;
-  extractedText: {
-    ingredients: string;
-    nutrition: string;
-    brand: string;
-  };
-  summary: string;
-}
+// Images are saved to disk so MemStorage never holds base64 strings in the heap.
+// The directory is created on first route registration.
+export const IMG_DIR = join(process.cwd(), "data", "images");
+if (!existsSync(IMG_DIR)) mkdirSync(IMG_DIR, { recursive: true });
+
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -37,139 +35,141 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "No image file provided" });
       }
 
+      // base64Image is still needed for the Gemini vision API call
       const base64Image = req.file.buffer.toString('base64');
-      const imageUrl = `data:${req.file.mimetype};base64,${base64Image}`;
-      console.log("Image converted to base64, size:", base64Image.length);
-      
-      let analysisResults;
-      let isFallbackMode = false;
-      
+      console.log("Image buffer received, size:", req.file.buffer.length);
+
+      // Save raw bytes to disk — client fetches via /api/images/:name
+      // This keeps MemStorage free of ~2 MB base64 strings per product.
+      let imageUrl: string;
       try {
-        // PRIMARY PATH: Attempt Gemini Multimodal Analysis
-        console.log("Calling identifyProductAndExtractText...");
-        analysisResults = await identifyProductAndExtractText(base64Image);
-        console.log("AI analysis completed, results:", analysisResults.length, "products found");
-        console.log("Analysis results:", JSON.stringify(analysisResults, null, 2));
-      } catch (error) {
-        // FALLBACK PATH: Use OCR + Open Food Facts/Open Beauty Facts
-        console.warn("Gemini failure. Initiating OCR fallback mode.");
-        isFallbackMode = true;
-        
+        const filename = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+        writeFileSync(join(IMG_DIR, filename), req.file.buffer);
+        imageUrl = `/api/images/${filename}`;
+      } catch (diskErr) {
+        // Disk write failed — fall back to inline base64 (functionally correct,
+        // just uses more memory).
+        console.warn("Disk image save failed, falling back to base64:", diskErr);
+        imageUrl = `data:${req.file.mimetype};base64,${base64Image}`;
+      }
+      
+      let analysisResults: any[];
+      let isFallbackMode = false;
+
+      // ── PROCESS 1: Image Vision ─────────────────────────────────────────────
+      // Try Groq vision first (500/day free), then Gemini (20/day), then OCR.
+      let aiScanError: Error | null = null;
+
+      try {
+        console.log("Process 1: Groq vision scan...");
+        analysisResults = await scanProductWithGroqVision(base64Image);
+        console.log("Groq ARA: identified", analysisResults.length, "product(s)");
+        console.log("Groq results:", JSON.stringify(analysisResults, null, 2));
+      } catch (groqErr) {
+        console.warn("Groq vision failed:", (groqErr as Error).message, "— trying Gemini fallback...");
         try {
-          // Step 1.1: OCR
-          console.log("Performing OCR on image...");
-          const ocrResult = await extractTextWithOCR(base64Image);
-          const ocrText = ocrResult.ParsedText || "";
-          
-          // Step 1.2: Try barcode search
-          console.log("Extracting product info from OCR text...");
-          const productInfo = extractProductInfoFromOCR(ocrText);
-          
-          if (productInfo.barcode) {
-            console.log("Valid barcode found, searching databases...");
-            
-            // Try Open Food Facts first (for food products)
-            let foodFactsData = await searchOpenFoodFacts(productInfo.barcode);
-            
-            if (foodFactsData) {
-              console.log("Product found in Open Food Facts");
-              const extractedData = extractFromOpenFoodFacts(foodFactsData);
-              
-              analysisResults = [{
-                productName: extractedData.productName,
-                extractedText: {
-                  ingredients: extractedData.ingredients,
-                  nutrition: `Calories: ${extractedData.nutrition.calories}, Fat: ${extractedData.nutrition.fat}g, Protein: ${extractedData.nutrition.protein}g`,
-                  brand: extractedData.brand
-                },
-                summary: `Product category: ${extractedData.productCategory || "Food"}. This is a food product identified through barcode lookup.`
-              }];
-            } else {
-              // Try Open Beauty Facts (for cosmetic products)
-              const beautyFactsData = await searchOpenBeautyFacts(productInfo.barcode);
-              
-              if (beautyFactsData) {
-                console.log("Product found in Open Beauty Facts");
-                const extractedData = extractFromOpenBeautyFacts(beautyFactsData);
-                
+          analysisResults = await identifyProductAndExtractText(base64Image);
+          console.log("Gemini ARA: identified", analysisResults.length, "product(s)");
+        } catch (geminiErr) {
+          aiScanError = geminiErr as Error;
+          console.warn("Both Groq and Gemini vision failed — OCR fallback.");
+          isFallbackMode = true;
+
+          try {
+            console.log("Performing OCR on image...");
+            const ocrResult = await extractTextWithOCR(base64Image);
+            const ocrText = ocrResult.ParsedText || "";
+            console.log("Extracting product info from OCR text...");
+            const productInfo = extractProductInfoFromOCR(ocrText);
+
+            if (productInfo.barcode) {
+              console.log("Valid barcode found, searching databases...");
+              const foodFactsData = await searchOpenFoodFacts(productInfo.barcode);
+              if (foodFactsData) {
+                const d = extractFromOpenFoodFacts(foodFactsData);
                 analysisResults = [{
-                  productName: extractedData.productName,
-                  extractedText: {
-                    ingredients: extractedData.ingredients,
-                    nutrition: "Non-food product - No nutrition information available",
-                    brand: extractedData.brand
-                  },
-                  summary: `Product category: ${extractedData.productCategory || "Cosmetic"}. This is a cosmetic product identified through barcode lookup.`
+                  productName: d.productName,
+                  extractedText: { ingredients: d.ingredients, brand: d.brand },
+                  summary: `${d.productCategory || "Food"} product from barcode lookup.`,
                 }];
               } else {
-                // Barcode found but not in either database
-                analysisResults = [{
-                  productName: productInfo.productName,
-                  extractedText: {
-                    ingredients: "Ingredients not available through barcode lookup",
-                    nutrition: "Product information not available in databases",
-                    brand: productInfo.brand
-                  },
-                  summary: "Product identified through OCR with barcode, but detailed information not available in food or beauty databases."
-                }];
+                const beautyData = await searchOpenBeautyFacts(productInfo.barcode);
+                if (beautyData) {
+                  const d = extractFromOpenBeautyFacts(beautyData);
+                  analysisResults = [{
+                    productName: d.productName,
+                    extractedText: { ingredients: d.ingredients, brand: d.brand },
+                    summary: `${d.productCategory || "Cosmetic"} product from barcode lookup.`,
+                  }];
+                } else {
+                  analysisResults = [{
+                    productName: productInfo.productName || "Unknown Product",
+                    extractedText: { ingredients: "Not available", brand: productInfo.brand },
+                    summary: "Product identified via barcode but not found in databases.",
+                  }];
+                }
               }
+            } else {
+              console.log("No barcode — general OCR extraction...");
+              const generalInfo = extractGeneralItemInfo(ocrText);
+              analysisResults = [{
+                productName: generalInfo.productName || "Unknown Product",
+                extractedText: { ingredients: generalInfo.ingredients || "", brand: generalInfo.brand || "" },
+                summary: `Item identified via OCR. Category: ${generalInfo.productCategory || "Unspecified"}.`,
+              }];
             }
-          } else {
-            // No valid barcode, use general item extraction
-            console.log("No valid barcode found, using general item extraction...");
-            const generalInfo = extractGeneralItemInfo(ocrText);
-            
+          } catch (ocrErr) {
+            console.error("OCR fallback failed:", ocrErr);
             analysisResults = [{
-              productName: generalInfo.productName,
-              extractedText: {
-                ingredients: generalInfo.ingredients,
-                nutrition: "General item - Nutrition information not applicable",
-                brand: generalInfo.brand
-              },
-              summary: `General item identified through OCR text parsing. Category: ${generalInfo.productCategory || "Unspecified"}.`
+              productName: "Scan Failed",
+              extractedText: { ingredients: "", brand: "" },
+              summary: "Could not read this image. Please try a clearer photo in better lighting.",
             }];
           }
-        } catch (ocrError) {
-          console.error("OCR fallback also failed:", ocrError);
-          // Final fallback
-          analysisResults = [{
-            productName: "Fallback Product",
-            extractedText: {
-              ingredients: "Fallback OCR: Unable to extract detailed ingredients without client-side processing",
-              nutrition: "Fallback Analysis: Please check product packaging for nutrition facts",
-              brand: "Unknown Brand"
-            },
-            summary: "This analysis used a fallback method due to primary AI service unavailability. For detailed information, please check the product packaging."
-          }];
         }
       }
 
-      // Map the AI results to database insertion and store them
-      console.log("Storing analysis results in database...");
-      const storedAnalyses = await Promise.all(analysisResults.map(async (productData) => {
-          const inserted = await storage.createProductAnalysis({
-              productName: productData.productName,
-              productSummary: productData.summary, // Use the summary property
-              extractedText: productData.extractedText,
-              imageUrl: imageUrl, // Store the base64 image once per capture
-              isFallbackMode: isFallbackMode // Set the fallback mode flag
-          });
-          console.log("Stored analysis for product:", productData.productName, "with ID:", inserted.id);
-          // Return the full object which includes the new ID
-          return {
-              analysisId: inserted.id, // Match the client's expected field name
-              productName: inserted.productName,
-              productSummary: inserted.productSummary,  // Fixed: Use productSummary to match frontend type
-              extractedText: inserted.extractedText,
-              imageUrl: inserted.imageUrl,
-              isFallbackMode: inserted.isFallbackMode, // Include fallback mode flag
-              // All deep analysis fields start as null
-              featuresData: null,
-              ingredientsData: null,
-              compositionData: null,
-              redditData: null,
-          };
+      // Cap at 5 to protect quota
+      const cappedResults = analysisResults.slice(0, 5);
+      console.log(`Storing ${cappedResults.length} product(s)...`);
+
+      // Store all products (no AI calls — just Map writes)
+      const insertedAll = await Promise.all(cappedResults.map((productData: any) => {
+        const brand = (productData.extractedText?.brand ?? "").trim();
+        const isGeneralScene = /^not applicable$|^not visible$/i.test(brand);
+        return storage.createProductAnalysis({
+          productName: productData.productName,
+          productSummary: productData.summary,
+          productCategory: productData.productCategory,
+          productContext: productData.productContext,
+          extractedText: productData.extractedText,
+          imageUrl: imageUrl,
+          isFallbackMode: isFallbackMode,
+          isGeneralScene,
+        });
       }));
+
+      // Composition pre-fetch REMOVED — client-side auto-start handles this
+      // and pre-fetching here wasted quota on Gemini before Groq was available.
+
+      const storedAnalyses = insertedAll.map((inserted) => {
+        console.log("Stored:", inserted.productName, "ID:", inserted.id);
+        return {
+          analysisId: inserted.id,
+          productName: inserted.productName,
+          productSummary: inserted.productSummary,
+          productCategory: inserted.productCategory,
+          productContext: inserted.productContext,
+          extractedText: inserted.extractedText,
+          imageUrl: inserted.imageUrl,
+          isFallbackMode: inserted.isFallbackMode,
+          isGeneralScene: inserted.isGeneralScene,
+          featuresData: null,
+          ingredientsData: null,
+          compositionData: null,
+          redditData: null,
+        };
+      });
 
       console.log("Returning", storedAnalyses.length, "stored analyses to client");
       // Return the array of stored product analyses
@@ -307,8 +307,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Ingredients Analysis
   app.post("/api/analyze-ingredients", async (req, res) => {
     try {
-      const { analysisId } = req.body;
-      
+      // === OLD CODE (commented for Make refresh button call API again) ===
+      // const { analysisId } = req.body;
+      // === UPDATED from old code above for Make refresh button call API again ===
+      const { analysisId, forceRefresh } = req.body;
+
       if (!analysisId) {
         return res.status(400).json({ error: "Analysis ID is required" });
       }
@@ -318,64 +321,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Analysis not found" });
       }
 
-      // Only run analysis if not already done
-      if (analysis.ingredientsData) {
+      // === OLD CODE (commented for Make refresh button call API again) ===
+      // // Only run analysis if not already done
+      // if (analysis.ingredientsData) {
+      //   return res.json(analysis.ingredientsData);
+      // }
+      // === UPDATED from old code above for Make refresh button call API again ===
+      // Only return cached data if not a forced refresh
+      if (analysis.ingredientsData && !forceRefresh) {
         return res.json(analysis.ingredientsData);
       }
 
-      let ingredientAnalysis;
-      
-      if (analysis.isFallbackMode) {
-        // Fallback Path: Use Open Food Facts/Open Beauty Facts or Web Grounding Service
-        console.log("Using fallback path for ingredients analysis");
-        
-        // Try to get ingredients from Open Food Facts if we have a barcode
-        if (analysis.extractedText.barcode) {
+      // ── PROCESS 2: Ingredients — Groq → Gemini → OCR fallback ──
+      let ingredientAnalysis: any;
+
+      try {
+        console.log("Groq ingredient safety analysis...");
+        ingredientAnalysis = await analyzeIngredientsGroq(
+          analysis.productName,
+          analysis.extractedText?.brand ?? "",
+          analysis.productSummary,
+          analysis.extractedText,
+        );
+      } catch (groqErr) {
+        console.warn("Groq ingredients failed:", (groqErr as Error).message, "— trying Gemini...");
+        try {
+          ingredientAnalysis = await analyzeIngredients(
+            analysis.productName,
+            analysis.extractedText?.brand ?? "",
+            analysis.productSummary,
+            analysis.extractedText,
+          );
+        } catch (geminiErr) {
+          console.warn("Gemini ingredients failed:", (geminiErr as Error).message, "— OCR fallback...");
           try {
-            // Determine which database to use based on product category
-            let productData = null;
-            
-            if (analysis.productSummary && analysis.productSummary.toLowerCase().includes("cosmetic")) {
-              // Try Open Beauty Facts for cosmetics
-              productData = await searchOpenBeautyFacts(analysis.extractedText.barcode);
-            } else {
-              // Try Open Food Facts for food products
-              productData = await searchOpenFoodFacts(analysis.extractedText.barcode);
-            }
-            
-            if (productData && productData.ingredients_text) {
-              // Map database ingredients to our format
-              const ingredientsList = productData.ingredients_text.split(/[,;]/).map((i: string) => i.trim()).filter((i: string) => i.length > 0);
-              const ingredientsAnalysis = ingredientsList.map((ingredient: string) => ({
-                name: ingredient,
-                safety_status: "Safe", // Default to safe for now
-                reason_with_source: "Identified through Open Food/Beauty Facts database lookup"
-              }));
-              
-              ingredientAnalysis = { ingredients_analysis: ingredientsAnalysis };
-            } else {
-              // Fallback to web grounding service
-              ingredientAnalysis = await analyzeIngredientsFallback(analysis);
-            }
-          } catch (error) {
-            console.error("Database lookup failed, using web grounding:", error);
             ingredientAnalysis = await analyzeIngredientsFallback(analysis);
+          } catch {
+            ingredientAnalysis = { ingredients_analysis: [] };
           }
-        } else {
-          // Use web grounding service
-          ingredientAnalysis = await analyzeIngredientsFallback(analysis);
         }
-      } else {
-        // Primary Path: Use Gemini Service
-        console.log("Using primary Gemini service for ingredients analysis");
-        ingredientAnalysis = await analyzeIngredients(analysis.productName, analysis.extractedText.brand, analysis.productSummary, analysis.extractedText);
       }
-      
+
       // Update storage with the result
-      const updatedAnalysis = await storage.updateProductAnalysis(analysisId, { 
+      const updatedAnalysis = await storage.updateProductAnalysis(analysisId, {
         ingredientsData: ingredientAnalysis
       });
-      
+
       res.json(updatedAnalysis?.ingredientsData || ingredientAnalysis);
 
     } catch (error) {
@@ -387,8 +378,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Composition Analysis (Calories/Nutrition)
   app.post("/api/analyze-composition", async (req, res) => {
     try {
-      const { analysisId } = req.body;
-      
+      // === OLD CODE (commented for Make refresh button call API again) ===
+      // const { analysisId } = req.body;
+      // === UPDATED from old code above for Make refresh button call API again ===
+      const { analysisId, forceRefresh } = req.body;
+
       if (!analysisId) {
         return res.status(400).json({ error: "Analysis ID is required" });
       }
@@ -398,100 +392,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Analysis not found" });
       }
 
-      // Only run analysis if not already done
-      if (analysis.compositionData) {
+      // === OLD CODE (commented for Make refresh button call API again) ===
+      // // Only run analysis if not already done
+      // if (analysis.compositionData) {
+      //   return res.json(analysis.compositionData);
+      // }
+      // === UPDATED from old code above for Make refresh button call API again ===
+      // Only return cached data if not a forced refresh
+      if (analysis.compositionData && !forceRefresh) {
         return res.json(analysis.compositionData);
       }
 
-      let composition;
-      
-      if (analysis.isFallbackMode) {
-        // Fallback Path: Use category-specific APIs
-        console.log("Using fallback path for composition analysis");
-        
-        // Determine category from extracted data
-        let productCategory = "General/Unspecified";
-        if (analysis.extractedText.nutrition && analysis.extractedText.nutrition.toLowerCase().includes("calories")) {
-          productCategory = "Food/Consumable";
-        } else if (analysis.productSummary && (analysis.productSummary.toLowerCase().includes("cosmetic") || analysis.productSummary.toLowerCase().includes("beauty"))) {
-          productCategory = "Cosmetic/Topical";
-        }
-        
-        // Use appropriate API based on category
-        if (productCategory === "Food/Consumable") {
-          // Use USDA FDC API
-          try {
-            const usdaData = await searchUSDAFDC(analysis.productName);
-            composition = mapUSDAtoCompositionSchema(usdaData);
-          } catch (error) {
-            console.error("USDA FDC lookup failed:", error);
-            composition = await analyzeCompositionFallback(analysis);
+      // ── PROCESS 2: Composition — Groq → OFacts barcode → Gemini → OCR fallback ──
+      // isFallbackMode only means the initial scan used OCR — analysis can still use AI.
+      let composition: any;
+
+      // 1. Try barcode lookup first (free, no AI quota)
+      const rawBrand = analysis.extractedText?.brand ?? "";
+      const barcodeMatch = rawBrand.match(/\b(\d{8,14})\b/);
+      const barcode = barcodeMatch?.[1] ?? null;
+      if (barcode) {
+        try {
+          console.log(`Barcode ${barcode} — trying Open Food Facts...`);
+          const ofactsProduct = await searchOpenFoodFacts(barcode);
+          if (ofactsProduct) {
+            composition = mapOFactsToCompositionSchema(ofactsProduct);
+            console.log("OFacts hit — AI call skipped");
           }
-        } else if (productCategory === "Cosmetic/Topical") {
-          // For cosmetics, try to get data from Open Beauty Facts
-          try {
-            if (analysis.extractedText.barcode) {
-              const beautyFactsData = await searchOpenBeautyFacts(analysis.extractedText.barcode);
-              if (beautyFactsData) {
-                // Create composition data for cosmetic products
-                composition = {
-                  productCategory: "Cosmetic/Topical",
-                  netQuantity: 0,
-                  unitType: "ml", // Default for cosmetics
-                  calories: 0,
-                  totalFat: 0,
-                  totalProtein: 0,
-                  compositionalDetails: [] as Array<{ key: string; value: string }>
-                };
-                
-                // Add available details from Open Beauty Facts
-                if (beautyFactsData.quantity) {
-                  composition.compositionalDetails.push({
-                    key: "Quantity",
-                    value: beautyFactsData.quantity
-                  });
-                }
-                
-                if (beautyFactsData.ingredients_text) {
-                  composition.compositionalDetails.push({
-                    key: "Ingredients",
-                    value: beautyFactsData.ingredients_text
-                  });
-                }
-                
-                if (beautyFactsData.categories) {
-                  composition.compositionalDetails.push({
-                    key: "Category",
-                    value: beautyFactsData.categories
-                  });
-                }
-              } else {
-                // Fallback to web grounding service
-                composition = await analyzeCompositionFallback(analysis);
-              }
-            } else {
-              // Fallback to web grounding service
-              composition = await analyzeCompositionFallback(analysis);
-            }
-          } catch (error) {
-            console.error("Open Beauty Facts lookup failed:", error);
-            composition = await analyzeCompositionFallback(analysis);
-          }
-        } else {
-          // Use web grounding service for general items
-          composition = await analyzeCompositionFallback(analysis);
+        } catch (ofErr) {
+          console.warn("OFacts lookup failed:", (ofErr as Error).message);
         }
-      } else {
-        // Primary Path: Use Gemini Service
-        console.log("Using primary Gemini service for composition analysis");
-        composition = await analyzeComposition(analysis.productName, analysis.extractedText.brand, analysis.productSummary, analysis.extractedText);
       }
-      
+
+      // 2. Groq analysis (primary AI — 14,400/day free)
+      if (!composition) {
+        try {
+          console.log("Groq composition analysis...");
+          composition = await analyzeCompositionGroq(
+            analysis.productName,
+            analysis.extractedText?.brand ?? "",
+            analysis.productSummary,
+            analysis.extractedText,
+            analysis.productCategory,
+            analysis.productContext,
+          );
+        } catch (groqErr) {
+          console.warn("Groq composition failed:", (groqErr as Error).message, "— trying Gemini...");
+          // 3. Gemini fallback (20/day)
+          try {
+            composition = await analyzeComposition(
+              analysis.productName,
+              analysis.extractedText?.brand ?? "",
+              analysis.productSummary,
+              analysis.extractedText,
+            );
+          } catch (geminiErr) {
+            console.warn("Gemini composition failed:", (geminiErr as Error).message, "— OCR fallback...");
+            // 4. OCR regex fallback (no AI)
+            try {
+              composition = await analyzeCompositionFallback(analysis);
+            } catch {
+              composition = { productCategory: "Unknown", netQuantity: 0, unitType: "g", calories: 0, totalFat: 0, totalProtein: 0, compositionalDetails: [] };
+            }
+          }
+        }
+      }
+
       // Update storage with the result
-      const updatedAnalysis = await storage.updateProductAnalysis(analysisId, { 
+      const updatedAnalysis = await storage.updateProductAnalysis(analysisId, {
         compositionData: composition
       });
-      
+
       res.json(updatedAnalysis?.compositionData || composition);
 
     } catch (error) {
@@ -503,8 +474,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Reddit Analysis
   app.post("/api/analyze-reddit", async (req, res) => {
     try {
-      const { analysisId } = req.body;
-      
+      // === OLD CODE (commented for Make refresh button call API again) ===
+      // const { analysisId } = req.body;
+      // === UPDATED from old code above for Make refresh button call API again ===
+      const { analysisId, forceRefresh } = req.body;
+
       if (!analysisId) {
         return res.status(400).json({ error: "Analysis ID is required" });
       }
@@ -514,29 +488,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Analysis not found" });
       }
 
-      // Only run analysis if not already done
-      if (analysis.redditData) {
+      // === OLD CODE (commented for Make refresh button call API again) ===
+      // // Only run analysis if not already done
+      // if (analysis.redditData) {
+      //   return res.json(analysis.redditData);
+      // }
+      // === UPDATED from old code above for Make refresh button call API again ===
+      // Only return cached data if not a forced refresh
+      if (analysis.redditData && !forceRefresh) {
         return res.json(analysis.redditData);
       }
 
-      let reviews;
-      
-      if (analysis.isFallbackMode) {
-        // Fallback Path: Return null as per zero-cost plan
-        console.log("Using fallback path for reddit analysis - returning null");
-        reviews = null;
-      } else {
-        // Primary Path: Use Reddit Service
-        console.log("Using primary reddit service for reddit analysis");
-        reviews = await searchRedditReviews(analysis.productName, analysis.extractedText.brand, analysis.productSummary);
+      // ── PROCESS 2: Reddit — Groq → Gemini → null ──
+      let reviews: any = null;
+
+      try {
+        console.log("Groq Reddit reviews...");
+        reviews = await searchRedditReviewsGroq(
+          analysis.productName,
+          analysis.extractedText?.brand ?? "",
+          analysis.productSummary,
+        );
+      } catch (groqErr) {
+        console.warn("Groq Reddit failed:", (groqErr as Error).message, "— trying Gemini...");
+        try {
+          reviews = await searchRedditReviews(
+            analysis.productName,
+            analysis.extractedText?.brand ?? "",
+            analysis.productSummary,
+          );
+        } catch (geminiErr) {
+          console.warn("Gemini Reddit also failed:", (geminiErr as Error).message);
+          reviews = null;
+        }
       }
-      
-      // Update storage with the result
-      const updatedAnalysis = await storage.updateProductAnalysis(analysisId, { 
-        redditData: reviews
+
+      // null means the service is unavailable (quota, error, fallback mode).
+      // Store null so subsequent cached reads also hit this branch, then tell
+      // the client to retry later rather than showing a misleading empty result.
+      if (reviews === null) {
+        await storage.updateProductAnalysis(analysisId, { redditData: null });
+        return res.status(503).json({ error: "UNAVAILABLE", retryAfter: 60 });
+      }
+
+      const updatedAnalysis = await storage.updateProductAnalysis(analysisId, {
+        redditData: reviews,
       });
-      
-      res.json(updatedAnalysis?.redditData || reviews);
+
+      res.json(updatedAnalysis?.redditData ?? reviews);
 
     } catch (error) {
       console.error("Error in reddit analysis:", error);
@@ -559,22 +558,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Analysis not found" });
       }
 
-      let aiResponse;
-      
-      if (analysis.isFallbackMode) {
-        // Fallback Path: Return standard message as per zero-cost plan
-        console.log("Using fallback path for chat - returning standard message");
-        aiResponse = "Interactive Q&A is temporarily unavailable due to current system constraints.";
-      } else {
-        // Primary Path: Use AI Service
-        console.log("Using primary AI service for chat response");
-        // Generate AI response - UPDATED to use new field names
-        aiResponse = await generateChatResponse(message, {
+      // ── PROCESS 2: Chat — Groq → Gemini ──
+      let aiResponse: string;
+
+      try {
+        console.log("Groq chat response...");
+        aiResponse = await generateChatResponseGroq(message, {
           productName: analysis.productName,
           productSummary: analysis.productSummary,
           extractedText: analysis.extractedText,
-          ingredientsData: analysis.ingredientsData,
         });
+      } catch (groqErr) {
+        console.warn("Groq chat failed:", (groqErr as Error).message, "— trying Gemini...");
+        try {
+          aiResponse = await generateChatResponse(message, {
+            productName: analysis.productName,
+            productSummary: analysis.productSummary,
+            extractedText: analysis.extractedText,
+            ingredientsData: analysis.ingredientsData,
+          });
+        } catch (geminiErr) {
+          console.warn("Gemini chat failed:", (geminiErr as Error).message);
+          aiResponse = "AI chat is temporarily unavailable. Please try again in a moment.";
+        }
       }
 
       // Save chat message

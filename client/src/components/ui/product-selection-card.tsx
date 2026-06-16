@@ -18,7 +18,7 @@ export const ProductSelectionCard: React.FC<ProductSelectionCardProps> = ({ prod
   const shortProductName = productNameWords.slice(0, 3).join(' ') + (productNameWords.length > 3 ? '...' : '');
 
   // Summary Logic (Frontend Constraint)
-  const summaryText = product.summary;
+  const summaryText = product.productSummary;
 
   return (
     <button
